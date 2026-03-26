@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bayraktar DİHA VTOL 無人機逆向工程分析報告</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f14;
+    --bg2: #13161e;
+    --bg3: #1a1e2a;
+    --border: #252a38;
+    --border2: #2e3548;
+    --text: #d4d8e4;
+    --text2: #8890a6;
+    --text3: #525c78;
+    --accent: #4a9eff;
+    --accent2: #2a6db5;
+    --gold: #c9a84c;
+    --gold2: #7a5e1e;
+    --green: #3aaa7e;
+    --red: #e05555;
+    --sidebar-w: 280px;
+    --serif: 'Noto Serif TC', serif;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.8;
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  #sidebar::-webkit-scrollbar { width: 4px; }
+  #sidebar::-webkit-scrollbar-track { background: transparent; }
+  #sidebar::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .sidebar-header {
+    padding: 28px 20px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-logo {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    opacity: 0.8;
+  }
+
+  .sidebar-title {
+    font-family: var(--serif);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  .sidebar-meta {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text3);
+    font-family: var(--mono);
+  }
+
+  .toc-nav { padding: 16px 0 24px; }
+
+  .toc-section-label {
+    padding: 4px 20px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--text3);
+    text-transform: uppercase;
+    margin-top: 12px;
+    margin-bottom: 2px;
+  }
+
+  .toc-item {
+    display: block;
+    padding: 6px 20px 6px 20px;
+    font-size: 13px;
+    color: var(--text2);
+    text-decoration: none;
+    transition: all 0.15s;
+    border-left: 2px solid transparent;
+    line-height: 1.4;
+  }
+
+  .toc-item:hover {
+    color: var(--text);
+    background: rgba(74,158,255,0.06);
+    border-left-color: var(--accent2);
+  }
+
+  .toc-item.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: rgba(74,158,255,0.08);
+    font-weight: 500;
+  }
+
+  .toc-item.sub {
+    padding-left: 32px;
+    font-size: 12px;
+  }
+
+  /* ── MAIN ── */
+  #main {
+    flex: 1;
+    min-width: 0;
+    max-width: 860px;
+    padding: 0 60px 80px 60px;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    padding: 60px 0 48px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 56px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: 'VTOL';
+    position: absolute;
+    right: -20px;
+    top: 20px;
+    font-family: var(--mono);
+    font-size: 120px;
+    font-weight: 500;
+    color: rgba(74,158,255,0.04);
+    letter-spacing: -4px;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .hero-eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .hero-title {
+    font-family: var(--serif);
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: #eef0f6;
+    margin-bottom: 20px;
+  }
+
+  .hero-subtitle {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--gold);
+    margin-bottom: 28px;
+    letter-spacing: 0.04em;
+  }
+
+  .hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .meta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text2);
+    font-family: var(--mono);
+  }
+
+  .meta-pill span.label {
+    color: var(--text3);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+  }
+
+  /* ── SECTIONS ── */
+  .section { margin-bottom: 64px; }
+
+  .section-anchor { position: relative; }
+
+  h2.section-title {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 700;
+    color: #eef0f6;
+    margin-bottom: 24px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  h2.section-title .num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 400;
+    flex-shrink: 0;
+  }
+
+  h3.sub-title {
+    font-family: var(--serif);
+    font-size: 16px;
+    font-weight: 600;
+    color: #cdd2e0;
+    margin: 32px 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  h3.sub-title::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 14px;
+    background: var(--gold);
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  h4.sub-sub-title {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text2);
+    margin: 20px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  p { margin-bottom: 14px; color: var(--text); }
+
+  strong { color: #c8d0e4; font-weight: 500; }
+
+  /* ── SPEC TABLE ── */
+  .spec-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0 28px;
+    font-size: 13px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .spec-table th {
+    background: var(--bg3);
+    padding: 10px 16px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--text3);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .spec-table td {
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  .spec-table tr:last-child td { border-bottom: none; }
+
+  .spec-table td:first-child {
+    color: var(--text2);
+    font-family: var(--mono);
+    font-size: 12px;
+    white-space: nowrap;
+    width: 200px;
+  }
+
+  .spec-table td:last-child { color: var(--text); }
+
+  .spec-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* ── CARDS (mission flow) ── */
+  .mission-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 16px 0 24px;
+  }
+
+  .flow-step {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 10px 14px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    transition: border-color 0.15s;
+    position: relative;
+  }
+
+  .flow-step:hover { border-color: var(--border2); }
+
+  .step-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    min-width: 20px;
+    padding-top: 2px;
+    font-weight: 500;
+  }
+
+  .step-text { font-size: 13px; color: var(--text); line-height: 1.6; }
+
+  /* ── HIGHLIGHT BOXES ── */
+  .callout {
+    padding: 16px 20px;
+    border-left: 3px solid var(--accent);
+    background: rgba(74,158,255,0.06);
+    border-radius: 0 6px 6px 0;
+    margin: 16px 0 24px;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .callout.warning {
+    border-left-color: var(--gold);
+    background: rgba(201,168,76,0.06);
+  }
+
+  .callout.note {
+    border-left-color: var(--green);
+    background: rgba(58,170,126,0.06);
+  }
+
+  /* ── CODE / MONO BLOCKS ── */
+  .layout-diagram {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin: 16px 0 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.9;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .powertrain-diagram {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin: 16px 0 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 2;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .powertrain-diagram .node {
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .powertrain-diagram .arrow { color: var(--text3); }
+
+  .timeline {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin: 16px 0 24px;
+    overflow-x: auto;
+  }
+
+  .timeline-row {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .timeline-row:last-child { border-bottom: none; }
+
+  .timeline-year {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--gold);
+    min-width: 44px;
+    font-weight: 500;
+  }
+
+  .timeline-arrow {
+    color: var(--text3);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .timeline-text {
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  /* ── CIVIL USE CARDS ── */
+  .use-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0 24px;
+  }
+
+  .use-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 16px 18px;
+    transition: border-color 0.15s;
+  }
+
+  .use-card:hover { border-color: var(--border2); }
+
+  .use-card-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--green);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 7px;
+  }
+
+  .use-card-text { font-size: 12.5px; color: var(--text2); line-height: 1.6; }
+
+  /* ── SENSOR TABLE ── */
+  .sensor-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 24px;
+    font-size: 13px;
+  }
+
+  .sensor-table th {
+    padding: 8px 14px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--text3);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sensor-table td {
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(37,42,56,0.6);
+    vertical-align: top;
+  }
+
+  .sensor-table td:first-child {
+    color: var(--gold);
+    font-family: var(--mono);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .sensor-table td:last-child { color: var(--text2); font-size: 13px; }
+
+  /* ── CONTROL TABLE ── */
+  .control-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 24px;
+    font-size: 13px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .control-table th {
+    background: var(--bg3);
+    padding: 9px 16px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--text3);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .control-table td {
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .control-table tr:last-child td { border-bottom: none; }
+
+  .control-table td:first-child { color: var(--accent); font-family: var(--mono); font-size: 12px; }
+
+  /* ── REFERENCES ── */
+  .ref-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+
+  .ref-item {
+    display: flex;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 12.5px;
+    transition: border-color 0.15s;
+  }
+
+  .ref-item:hover { border-color: var(--border2); }
+
+  .ref-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    min-width: 20px;
+  }
+
+  .ref-content { flex: 1; }
+
+  .ref-title { color: var(--text); line-height: 1.5; }
+
+  .ref-link { display: block; font-family: var(--mono); font-size: 10px; color: var(--accent); margin-top: 4px; word-break: break-all; opacity: 0.7; text-decoration: none; }
+
+  .ref-link:hover { opacity: 1; }
+
+  /* ── FOOTER ── */
+  .footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    line-height: 1.8;
+  }
+
+  /* ── HERO IMAGE SLOT ── */
+  .hero-image-slot {
+    width: 100%;
+    aspect-ratio: 16 / 7;
+    background: var(--bg2);
+    border: 1.5px dashed var(--border2);
+    border-radius: 8px;
+    margin-bottom: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text3);
+  }
+
+  .hero-image-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+
+  .hero-image-inner svg { opacity: 0.4; }
+
+  .img-hint {
+    font-size: 11px;
+    color: var(--text3);
+    opacity: 0.6;
+  }
+
+  /* ── MOBILE ── */
+  .mob-toc-btn {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 44px;
+    height: 44px;
+    background: var(--accent);
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 18px;
+    box-shadow: 0 4px 16px rgba(74,158,255,0.3);
+  }
+
+  @media (max-width: 780px) {
+    body { flex-direction: column; }
+    #sidebar {
+      width: 100%;
+      height: auto;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      max-height: 60px;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    #sidebar.open { max-height: 100vh; }
+    #main { padding: 80px 20px 60px; }
+    .mob-toc-btn { display: flex; }
+    .use-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── SCROLL ANIMATIONS ── */
+  .section { opacity: 0; transform: translateY(16px); transition: opacity 0.4s ease, transform 0.4s ease; }
+  .section.visible { opacity: 1; transform: none; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">NSTC · 工科海工專論</div>
+    <div class="sidebar-title">Bayraktar DİHA VTOL<br>逆向工程分析報告</div>
+    <div class="sidebar-meta">2026-03</div>
+  </div>
+  <div class="toc-nav">
+    <div class="toc-section-label">目錄</div>
+    <a href="#sec1" class="toc-item" data-target="sec1">1. 平台概述</a>
+    <a href="#sec2" class="toc-item" data-target="sec2">2. 應用場域分析</a>
+    <a href="#sec2-1" class="toc-item sub" data-target="sec2-1">2.1 軍事應用</a>
+    <a href="#sec2-2" class="toc-item sub" data-target="sec2-2">2.2 民用潛力</a>
+    <a href="#sec3" class="toc-item" data-target="sec3">3. 逆向工程分析</a>
+    <a href="#sec3-1" class="toc-item sub" data-target="sec3-1">3.1 機構設計</a>
+    <a href="#sec3-2" class="toc-item sub" data-target="sec3-2">3.2 電系分析</a>
+    <a href="#sec3-3" class="toc-item sub" data-target="sec3-3">3.3 飛行力學與控制</a>
+    <a href="#sec3-4" class="toc-item sub" data-target="sec3-4">3.4 通訊系統</a>
+    <a href="#sec4" class="toc-item" data-target="sec4">4. 製造工藝</a>
+    <a href="#sec5" class="toc-item" data-target="sec5">5. 結語</a>
+    <a href="#sec6" class="toc-item" data-target="sec6">6. 參考資料</a>
+  </div>
+</nav>
+
+<button class="mob-toc-btn" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+
+<!-- MAIN CONTENT -->
+<main id="main">
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="hero-eyebrow">逆向工程分析報告 · Reverse Engineering Analysis</div>
+    <h1 class="hero-title">Bayraktar DİHA VTOL<br>無人機系統分析</h1>
+    <div class="hero-subtitle">Bayraktar Kalkan DİHA — Dikey İniş Hava Aracı</div>
+    <div class="hero-meta">
+      <div class="meta-pill"><span class="label">課程</span>工科海工專論</div>
+      <div class="meta-pill"><span class="label">報告人</span>施子嚴・葉哲綸・王心妤</div>
+      <div class="meta-pill"><span class="label">製造商</span>Baykar Teknoloji</div>
+      <div class="meta-pill"><span class="label">日期</span>2026年3月</div>
+    </div>
+  </header>
+
+  <!-- HERO IMAGE PLACEHOLDER -->
+  <div class="hero-image-slot">
+    <div class="hero-image-inner">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="12" width="40" height="28" rx="3" stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="18" cy="24" r="5" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M28 30 L34 22 L40 30" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M4 8 L10 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span>在此置入圖片</span>
+      <span class="img-hint">將 &lt;img src="your-image.jpg"&gt; 替換此區塊</span>
+    </div>
+  </div>
+
+  <!-- SEC 1 -->
+  <section class="section" id="sec1">
+    <h2 class="section-title"><span class="num">01</span>平台概述</h2>
+    <p>Bayraktar DİHA（Dikey İniş Hava Aracı，土耳其語意為「垂直降落無人機」）是由土耳其 Baykar 公司開發的<strong>混合動力 VTOL 無人飛行載具（UAV）</strong>，首次亮相於 2019 年，並於 2021 年 TEKNOFEST 航太展正式對外發布。該機屬於 Mini Tactical UAV 等級，後續升級版本稱為 <strong>Bayraktar KALKAN DİHA</strong>。</p>
+
+    <h3 class="sub-title">主要性能諸元</h3>
+    <table class="spec-table">
+      <thead><tr><th>參數</th><th>數值</th></tr></thead>
+      <tbody>
+        <tr><td>翼展</td><td>5.0 公尺</td></tr>
+        <tr><td>機身長度</td><td>1.5 公尺（DİHA）／1.9 公尺（KALKAN）</td></tr>
+        <tr><td>最大起飛重量</td><td>30 公斤（2021 初始版）／50 公斤（中期升級）／78 公斤（KALKAN 官方）</td></tr>
+        <tr><td>酬載重量</td><td>5 公斤（DİHA）／3 公斤（KALKAN）</td></tr>
+        <tr><td>最大速度</td><td>80 節（約 148 km/h）（DİHA）／55 KIAS（KALKAN）</td></tr>
+        <tr><td>巡航速度</td><td>48 KIAS（KALKAN 官方值）</td></tr>
+        <tr><td>任務高度</td><td>9,000 呎（DİHA）／6,000 呎（KALKAN）</td></tr>
+        <tr><td>升限</td><td>15,000 呎（DİHA）／10,000 呎（KALKAN）；測試紀錄達 14,000 呎</td></tr>
+        <tr><td>續航時間</td><td>12 小時（DİHA 理論值）／6–8 小時（KALKAN；官方 6h，測試達 8h）</td></tr>
+        <tr><td>通訊距離</td><td>KALKAN 官方 80+ 公里；2025 年測試驗證超過 100 公里</td></tr>
+        <tr><td>起降模式</td><td>垂直起降 / 機腹著陸 / 降落傘</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- SEC 2 -->
+  <section class="section" id="sec2">
+    <h2 class="section-title"><span class="num">02</span>應用場域分析</h2>
+
+    <h3 class="sub-title" id="sec2-1">2.1 軍事應用</h3>
+    <p>DİHA 的設計核心圍繞著<strong>戰術情報、監視與偵察（ISR）</strong>任務。其無跑道起降能力賦予前線部隊高度彈性。</p>
+
+    <h4 class="sub-sub-title">地面作戰支援</h4>
+    <p>在複雜地形（山地、叢林、都市環境）中，DİHA 利用垂直起降特性，可從 <strong>20×20 公尺的限縮空間</strong>直接升空。典型任務流程如下：</p>
+
+    <div class="mission-flow">
+      <div class="flow-step"><span class="step-num">01</span><span class="step-text">地面部隊迅速展開地面控制站（GCS）</span></div>
+      <div class="flow-step"><span class="step-num">02</span><span class="step-text">DİHA 從任意平坦地點垂直起飛</span></div>
+      <div class="flow-step"><span class="step-num">03</span><span class="step-text">切換至固定翼巡航，以汽油引擎持續飛行 6–12 小時</span></div>
+      <div class="flow-step"><span class="step-num">04</span><span class="step-text">利用 EO/IR 攝影機進行目標偵測與追蹤</span></div>
+      <div class="flow-step"><span class="step-num">05</span><span class="step-text">即時回傳影像情資至指揮部</span></div>
+      <div class="flow-step"><span class="step-num">06</span><span class="step-text">自主垂直降落返回回收點</span></div>
+    </div>
+
+    <h4 class="sub-sub-title">艦載作戰</h4>
+    <p>DİHA 是土耳其海軍 <strong>TCG Anadolu（兩棲攻擊艦）</strong>無人機空中群的候選平台之一。艦上有限的甲板空間使垂直起降能力不可或缺。此外，DİHA 可作為 Bayraktar TB2 的<strong>通訊中繼節點</strong>，延伸整體戰術覆蓋範圍。</p>
+
+    <h4 class="sub-sub-title">邊境警戒與海上巡邏</h4>
+    <p>長航時（KALKAN 版達 6–8 小時；原版 DİHA 理論值達 12 小時）配合 100+ 公里通訊範圍，使 DİHA 能夠對廣大邊境地帶進行持續性監控，並在夜間利用熱成像（LWIR）執行任務。</p>
+
+    <h3 class="sub-title" id="sec2-2">2.2 民用潛力</h3>
+    <p>儘管 DİHA 定位為軍用平台，其技術架構亦適用於多項民間任務：</p>
+
+    <div class="use-grid">
+      <div class="use-card">
+        <div class="use-card-title">災害搜救</div>
+        <div class="use-card-text">EO/IR 多光譜感測器可在夜間或低能見度下偵測生命跡象，適用於颶風、洪水、地震後大範圍搜索。</div>
+      </div>
+      <div class="use-card">
+        <div class="use-card-title">基礎設施巡檢</div>
+        <div class="use-card-text">對高壓輸電線路自動路線追蹤巡檢，或用於石油天然氣管線洩漏監測，取代危險的人工巡線。</div>
+      </div>
+      <div class="use-card">
+        <div class="use-card-title">精準農業</div>
+        <div class="use-card-text">搭載多光譜相機進行 NDVI 植被指數分析，協助農民決策施肥與灌溉；熱成像可用於野火早期偵測。</div>
+      </div>
+      <div class="use-card">
+        <div class="use-card-title">海洋執法</div>
+        <div class="use-card-text">監控非法捕魚、偷渡及海洋環境污染事件，無需消耗昂貴的直升機飛行時數。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SEC 3 -->
+  <section class="section" id="sec3">
+    <h2 class="section-title"><span class="num">03</span>逆向工程分析</h2>
+
+    <h3 class="sub-title" id="sec3-1">3.1 機構設計（氣動外形與結構）</h3>
+
+    <h4 class="sub-sub-title">翼身融合（Blended Wing Body）佈局</h4>
+    <p>DİHA 採用<strong>翼身融合佈局</strong>，機身與機翼之間無明顯分界線。此設計帶來低雷達截面積（RCS）、較高升阻比與緊湊的結構容積等三大優點，將酬載艙、電池組與燃油箱整合於翼身內部。</p>
+
+    <h4 class="sub-sub-title">升力旋翼佈局</h4>
+    <p>機體搭載<strong>四具電動升力旋翼（VTOL Motors）</strong>，分置於翼面上的四個臂架位置。四旋翼採差動配置，旋轉方向兩兩相反，反扭矩相互抵消，賦予機體偏航控制能力。</p>
+    <div class="layout-diagram">       前旋翼(左)    前旋翼(右)
+           ○             ○
+  ←━━━━━━━━━━━━━━━━━━━━━→  主翼（5m 翼展）
+           ○             ○
+       後旋翼(左)    後旋翼(右)
+                 ↑
+           後推式螺旋槳（巡航引擎）</div>
+
+    <h4 class="sub-sub-title">後推式螺旋槳</h4>
+    <p>機身後緣中央配置<strong>單具後推式螺旋槳（Pusher Propeller）</strong>，由 BAYKUŞ 二行程汽油引擎驅動，功率約 12 馬力，重量（含輔助系統）約 4.5 公斤。後推佈局使機首方向無螺旋槳擾流，有利感測器清晰視野，並降低振動對光電酬載的影響。</p>
+
+    <h4 class="sub-sub-title">材料與結構製造（工程推估）</h4>
+    <table class="spec-table">
+      <thead><tr><th>部位</th><th>推估材料</th></tr></thead>
+      <tbody>
+        <tr><td>主翼結構</td><td>碳纖維複合材料（CFRP）+ 蜂巢夾心</td></tr>
+        <tr><td>機身外殼</td><td>玻璃纖維複合材料（GFRP）</td></tr>
+        <tr><td>旋翼臂架</td><td>CFRP 管材</td></tr>
+        <tr><td>螺旋槳葉片</td><td>碳纖維強化環氧樹脂</td></tr>
+        <tr><td>起落裝置</td><td>碳纖維管 / 鋁合金</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub-title" id="sec3-2">3.2 電系分析</h3>
+
+    <h4 class="sub-sub-title">混合動力架構（Series Hybrid）</h4>
+    <p>DİHA 的核心電系架構為<strong>串聯混合動力系統</strong>：垂直起降階段由電池組供電驅動四具升力馬達；巡航階段汽油引擎獨力推進並同步發電補充電池，確保後續降落電能儲備。</p>
+
+    <div class="powertrain-diagram"><span class="node">[汽油引擎 BAYKUŞ]</span>
+<span class="arrow">       ↓</span>
+<span class="node">[發電機 / 交流發電機]</span>
+<span class="arrow">       ↓  整流</span>
+<span class="node">[直流匯流排（DC Bus）]</span>
+<span class="arrow">       ↙              ↘</span>
+<span class="node">[LiPo 電池組]</span>        <span class="node">[4× VTOL 無刷馬達]</span>
+<span class="arrow">       ↓</span>
+<span class="node">[電源管理系統 BMS/PMS]</span>
+<span class="arrow">       ↓</span>
+<span class="node">[飛控電腦 / 感測器 / 通訊]</span></div>
+
+    <h4 class="sub-sub-title">無刷電動馬達（VTOL 升力馬達，工程推估）</h4>
+    <p>型式：高效無刷直流馬達（BLDC）；轉速每具估計 3,000–5,000 RPM（配合大直徑槳葉）；旋槳直徑推估 16–20 英寸；電子調速器（ESC）與飛控電腦整合，實現毫秒級響應。</p>
+
+    <h4 class="sub-sub-title">電源管理系統（BMS/PMS）</h4>
+    <p>主要功能包含電池健康監控（電壓、溫度、SOC）、過充/過放保護、VTOL 與巡航模式間的自動切換邏輯，以及電力系統故障時自動啟動降落傘回收的緊急備援機制。</p>
+
+    <h3 class="sub-title" id="sec3-3">3.3 飛行力學與控制系統</h3>
+
+    <h4 class="sub-sub-title">飛行模式轉換流程</h4>
+    <div class="mission-flow">
+      <div class="flow-step"><span class="step-num" style="color:var(--gold)">VTOL</span><span class="step-text">四電動旋翼差速控制提供 Roll / Pitch / Yaw；飛控以 <strong>Baykar 自研 RTOS</strong> 運行多個 PID 迴路</span></div>
+      <div class="flow-step"><span class="step-num" style="color:var(--gold)">過渡</span><span class="step-text">汽油引擎後推螺旋槳啟動→機體前傾→主翼升力漸增→電動旋翼油門降低至關閉</span></div>
+      <div class="flow-step"><span class="step-num" style="color:var(--gold)">巡航</span><span class="step-text">翼面控制面（副翼、升降副翼）接管姿態控制；汽油引擎維持推力並同步發電</span></div>
+      <div class="flow-step"><span class="step-num" style="color:var(--gold)">返降</span><span class="step-text">減速至臨界空速以下→電動旋翼重啟→垂直下降（或機腹著陸 / 降落傘展開）</span></div>
+    </div>
+
+    <h4 class="sub-sub-title">飛控電腦（FCC）架構</h4>
+    <p>DİHA 的飛控系統為 <strong>Baykar 自主研發</strong>，設計概念與 Bayraktar TB2 / Akıncı 一脈相承，採多餘度感測器投票表決機制（容錯架構），並以擴展卡爾曼濾波器（EKF）融合 IMU、GPS/GNSS、氣壓計、磁羅盤等多源定位資料。自主任務模式涵蓋路線追蹤、目標環繞、RTH 及 BG-160 AI 自動追蹤功能。</p>
+
+    <h4 class="sub-sub-title">氣動控制面</h4>
+    <table class="control-table">
+      <thead><tr><th>控制面</th><th>功能</th></tr></thead>
+      <tbody>
+        <tr><td>副翼（Ailerons）</td><td>橫滾（Roll）控制</td></tr>
+        <tr><td>升降副翼（Elevons）</td><td>縱向俯仰（Pitch）控制</td></tr>
+        <tr><td>四旋翼差速</td><td>偏航（Yaw）及 VTOL 全自由度控制</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub-title" id="sec3-4">3.4 通訊系統</h3>
+
+    <h4 class="sub-sub-title">資料鏈架構</h4>
+    <p>DİHA 採用<strong>雙向加密資料鏈</strong>：上行鏈路傳輸指令與控制訊號（C2）及任務更新；下行鏈路傳輸即時影像（EO/IR）、遙測資料與任務回報。推估工作頻段為 <strong>L 波段或 C 波段</strong>（推估），KALKAN 官方通訊距離 80+ 公里，2025 年測試驗證超過 100 公里。</p>
+
+    <h4 class="sub-sub-title">TB2 中繼延伸</h4>
+    <p>Baykar 已驗證以 <strong>Bayraktar TB2 作為中繼節點</strong>，顯著延伸 DİHA 的有效通訊距離，實現超視距（BVR）資料回傳。這種「母艦無人機＋子機」架構在現代無人機體系中極具前瞻性。</p>
+
+    <h4 class="sub-sub-title">BG-160 光電／紅外線系統（EO/IR）</h4>
+    <p>酬載核心為 Baykar 自研的 <strong>BG-160 多光譜系統</strong>：</p>
+    <table class="sensor-table">
+      <thead><tr><th>感測器元件</th><th>功能</th></tr></thead>
+      <tbody>
+        <tr><td>可見光相機</td><td>日間高解析度影像偵測</td></tr>
+        <tr><td>熱成像（LWIR）</td><td>夜間目標偵測，識別人員車輛</td></tr>
+        <tr><td>AI 影像追蹤</td><td>自動鎖定追蹤指定目標</td></tr>
+        <tr><td>雷射測距儀</td><td>精確定位目標坐標</td></tr>
+        <tr><td>雷射指示器</td><td>引導精確武器打擊（軍用構型）</td></tr>
+      </tbody>
+    </table>
+
+    <h4 class="sub-sub-title">GNSS 定位</h4>
+    <p>系統支援 <strong>GPS / GLONASS</strong> 雙星定位，具備基礎抗欺騙能力。GNSS 遭干擾時可切換至慣性導航（INS）維持基本飛行穩定。</p>
+  </section>
+
+  <!-- SEC 4 -->
+  <section class="section" id="sec4">
+    <h2 class="section-title"><span class="num">04</span>製造工藝探討</h2>
+
+    <h3 class="sub-title">4.1 複合材料製造工藝</h3>
+    <p>DİHA 的機翼與機身估計採用以下工藝：乾式碳纖維預浸料（Prepreg）模具鋪層後 Autoclave 或真空袋固化；樹脂轉注成型（RTM）適用於複雜曲面量產；Nomex 蜂巢置於兩片碳纖維蒙皮之間，提供高剛性低重量的翼面結構。</p>
+
+    <h3 class="sub-title">4.2 系統整合與國產化策略</h3>
+    <p>土耳其具有高度的國防自主化意識，DİHA 的主要子系統均強調國產化。</p>
+
+    <div class="callout note">
+      <strong>國產子系統清單</strong><br>
+      · BAYKUŞ 引擎（由 Erin Motor 為 Baykar 設計生產的二行程汽油引擎）<br>
+      · BG-160 光電系統（Baykar 自研 EO/IR 酬載）<br>
+      · 飛控電腦與 GCS 軟體（Baykar 自研）
+    </div>
+
+    <p>這種垂直整合（Vertical Integration）策略降低了對外國零組件的依賴，使 Baykar 能掌握完整的系統知識，有助於快速迭代開發。</p>
+
+    <h3 class="sub-title">4.3 設計演進時間線</h3>
+    <div class="timeline">
+      <div class="timeline-row"><span class="timeline-year">2019</span><span class="timeline-arrow">→</span><span class="timeline-text">DİHA 概念首次發布</span></div>
+      <div class="timeline-row"><span class="timeline-year">2021</span><span class="timeline-arrow">→</span><span class="timeline-text">TEKNOFEST 公開展示（首個量產前原型，MTOW 30 kg）</span></div>
+      <div class="timeline-row"><span class="timeline-year">2022</span><span class="timeline-arrow">→</span><span class="timeline-text">飛行測試驗證（8,000 呎高度測試）</span></div>
+      <div class="timeline-row"><span class="timeline-year">2023</span><span class="timeline-arrow">→</span><span class="timeline-text">更名升級為 KALKAN DİHA；MTOW 提升至 78 kg（Baykar 官網）</span></div>
+      <div class="timeline-row"><span class="timeline-year">2024</span><span class="timeline-arrow">→</span><span class="timeline-text">第 30 次飛行系統識別測試；累計 70+ 小時飛行時數</span></div>
+      <div class="timeline-row"><span class="timeline-year">2025</span><span class="timeline-arrow">→</span><span class="timeline-text">Mothership 概念驗證成功；11 月 27 日單次空投 7 架 SkyDagger FPV 無人機（與 Skydagger 公司合作）</span></div>
+    </div>
+  </section>
+
+  <!-- SEC 5 -->
+  <section class="section" id="sec5">
+    <h2 class="section-title"><span class="num">05</span>結語</h2>
+    <p>Bayraktar DİHA / KALKAN DİHA 代表了土耳其無人機工業在 <strong>VTOL 戰術 UAV</strong> 領域的重要突破。其混合動力架構（電動 VTOL + 汽油巡航引擎）有效平衡了靈活性（無跑道部署）與續航力（KALKAN 版 6–8 小時）兩大核心矛盾。翼身融合氣動外形則在保持低可偵測性的同時提供優異升阻比。</p>
+    <p>從逆向工程角度觀察，DİHA 的設計哲學與 Baykar TB2 一脈相承：<strong>高度國產化、模組化感測器酬載、自主飛控軟體能力</strong>。隨著 KALKAN 版本持續進行飛行測試並驗證 Mothership 空投 FPV 概念，DİHA 系列有望成為未來戰場上<strong>分散式無人機作戰體系</strong>的核心節點。</p>
+  </section>
+
+  <!-- SEC 6 -->
+  <section class="section" id="sec6">
+    <h2 class="section-title"><span class="num">06</span>參考資料</h2>
+    <ol class="ref-list">
+      <li class="ref-item"><span class="ref-num">01</span><div class="ref-content"><div class="ref-title">Baykar Teknoloji 官方網站 — Bayraktar KALKAN VTOL 產品頁</div><a class="ref-link" href="https://baykartech.com/en/uav/bayraktar-diha/" target="_blank">baykartech.com/en/uav/bayraktar-diha</a></div></li>
+      <li class="ref-item"><span class="ref-num">02</span><div class="ref-content"><div class="ref-title">Wikipedia — Bayraktar VTOL（英文條目）</div><a class="ref-link" href="https://en.wikipedia.org/wiki/Bayraktar_VTOL" target="_blank">en.wikipedia.org/wiki/Bayraktar_VTOL</a></div></li>
+      <li class="ref-item"><span class="ref-num">03</span><div class="ref-content"><div class="ref-title">UAS Vision — "Bayraktar DIHA VTOL Drone Completes Flight Test at 8,000 ft"（2023）</div><a class="ref-link" href="https://www.uasvision.com/2023/01/18/bayraktar-diha-vtol-drone-completes-flight-test-at-8000-ft/" target="_blank">uasvision.com</a></div></li>
+      <li class="ref-item"><span class="ref-num">04</span><div class="ref-content"><div class="ref-title">Grokipedia — Bayraktar VTOL 技術分析（2026 年 1 月）</div><a class="ref-link" href="https://grokipedia.com/page/Bayraktar_VTOL" target="_blank">grokipedia.com</a></div></li>
+      <li class="ref-item"><span class="ref-num">05</span><div class="ref-content"><div class="ref-title">Army Recognition — "Baykar Enhances Drone Technologies with Kalkan VTOL"（2025）</div><a class="ref-link" href="https://armyrecognition.com/news/aerospace-news/2025/baykar-enhances-drone-technologies-with-kalkan-vtol-offering-an-operational-range-over-100-km" target="_blank">armyrecognition.com</a></div></li>
+      <li class="ref-item"><span class="ref-num">06</span><div class="ref-content"><div class="ref-title">Army Recognition — "Baykar's Kalkan VTOL Drone Achieves FPV Drone Launch Test"（2025）</div><a class="ref-link" href="https://www.armyrecognition.com/news/aerospace-news/2025/baykars-kalkan-vtol-drone-achieves-fpv-drone-launch-test-marking-new-era-in-airborne-motherships" target="_blank">armyrecognition.com</a></div></li>
+      <li class="ref-item"><span class="ref-num">07</span><div class="ref-content"><div class="ref-title">Defense Here — "Testing of Bayraktar's VTOL UAV 'KALKAN DİHA' continues"（2024）</div><a class="ref-link" href="https://defensehere.com/en/testing-of-bayraktars-vtol-uav-kalkan-diha-continues/" target="_blank">defensehere.com</a></div></li>
+      <li class="ref-item"><span class="ref-num">08</span><div class="ref-content"><div class="ref-title">MRO Business Today — "Baykar successfully conducts flight demonstration on Bayraktar DIHA"（2023）</div><a class="ref-link" href="https://www.mrobusinesstoday.com/baykar-successfully-conducts-flight-demonstration-on-bayraktar-diha-drone-at-8000-ft/" target="_blank">mrobusinesstoday.com</a></div></li>
+      <li class="ref-item"><span class="ref-num">09</span><div class="ref-content"><div class="ref-title">Anadolu Agency — "Vertical-landing Bayraktar DIHA drone completes flight test at 8,000 ft"</div><a class="ref-link" href="https://www.aa.com.tr/en/turkiye/vertical-landing-bayraktar-diha-drone-completes-flight-test-at-8-000-ft/2786017" target="_blank">aa.com.tr</a></div></li>
+      <li class="ref-item"><span class="ref-num">10</span><div class="ref-content"><div class="ref-title">HandWiki — Engineering:Bayraktar VTOL</div><a class="ref-link" href="https://handwiki.org/wiki/Engineering:Bayraktar_VTOL" target="_blank">handwiki.org</a></div></li>
+    </ol>
+
+    <div class="footer">
+      本報告依公開資訊彙整，部分技術細節（引擎型號、電氣規格）為基於同類型系統之工程推估，非官方技術文件。<br>
+      課程：工科海工專論 · 報告人：施子嚴、葉哲綸、王心妤 · 2026年3月
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // TOC active state on scroll
+  const sections = document.querySelectorAll('section[id], h3[id]');
+  const tocItems = document.querySelectorAll('.toc-item[data-target]');
+
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        tocItems.forEach(t => t.classList.remove('active'));
+        const active = document.querySelector(`.toc-item[data-target="${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-10% 0px -70% 0px' });
+
+  sections.forEach(s => obs.observe(s));
+
+  // Scroll reveal
+  const revealObs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('visible'); revealObs.unobserve(e.target); }
+    });
+  }, { threshold: 0.05 });
+
+  document.querySelectorAll('.section').forEach(s => revealObs.observe(s));
+
+  // Close mobile sidebar on link click
+  document.querySelectorAll('.toc-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.getElementById('sidebar').classList.remove('open');
+    });
+  });
+</script>
+</body>
+</html>
