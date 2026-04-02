@@ -1,0 +1,14 @@
+../Core/Src/main.c:89:6:delay_us	16	static
+../Core/Src/main.c:98:6:DHT11_SetPinOutput	24	static
+../Core/Src/main.c:107:6:DHT11_SetPinInput	24	static
+../Core/Src/main.c:119:5:DHT11_Start	8	static
+../Core/Src/main.c:134:5:DHT11_CheckResponse	16	static
+../Core/Src/main.c:166:5:DHT11_ReadByte	16	static
+../Core/Src/main.c:201:5:DHT11_ReadData	40	static
+../Core/Src/main.c:234:6:updateLEDs	8	static
+../Core/Src/main.c:251:6:updateOLED	88	static
+../Core/Src/main.c:289:6:sendSerialData	120	static
+../Core/Src/main.c:299:6:handleButton	16	static
+../Core/Src/main.c:378:5:main	152	static
+../Core/Src/main.c:462:6:SystemClock_Config	72	static
+../Core/Src/main.c:502:6:Error_Handler	4	static,ignoring_inline_asm

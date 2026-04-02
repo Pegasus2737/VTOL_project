@@ -1,0 +1,14 @@
+../Core/Src/main.c:89:6:delay_us	2
+../Core/Src/main.c:98:6:DHT11_SetPinOutput	1
+../Core/Src/main.c:107:6:DHT11_SetPinInput	1
+../Core/Src/main.c:119:5:DHT11_Start	1
+../Core/Src/main.c:134:5:DHT11_CheckResponse	7
+../Core/Src/main.c:166:5:DHT11_ReadByte	7
+../Core/Src/main.c:201:5:DHT11_ReadData	8
+../Core/Src/main.c:234:6:updateLEDs	2
+../Core/Src/main.c:251:6:updateOLED	2
+../Core/Src/main.c:289:6:sendSerialData	1
+../Core/Src/main.c:299:6:handleButton	5
+../Core/Src/main.c:378:5:main	9
+../Core/Src/main.c:462:6:SystemClock_Config	3
+../Core/Src/main.c:502:6:Error_Handler	1
