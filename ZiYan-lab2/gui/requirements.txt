@@ -1,0 +1,29 @@
+# STM32 Temperature & Humidity Monitoring System - GUI
+# Python >= 3.8
+
+# Core GUI Framework
+PyQt6>=6.6.0
+PyQt6-Qt6>=6.6.0
+
+# Serial Communication
+pyserial>=3.5
+
+# Data Processing & Analysis
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Real-time Plotting
+pyqtgraph>=0.13.3
+
+# Static Charts & Export
+matplotlib>=3.7.0
+openpyxl>=3.1.0
+XlsxWriter>=3.1.0
+
+# Audio (Alarm Sound) - Stage 4 (Optional, falls back to winsound)
+# pygame>=2.5.0  # Uncomment if you have Python < 3.12 or can build from source
+# For Python 3.12+: pygame has build issues, using winsound fallback instead
+# If you need pygame: try `pip install pygame --pre` or download wheel from pygame.org
+
+# Optional: Better looking widgets
+# pyqtdarktheme>=2.1.0  # Uncomment for dark theme support
