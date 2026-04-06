@@ -23,7 +23,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## Current Status - Stage 4 Complete ✓
+## Current Status - Stage 5 Complete ✓
 
 **Completed Features:**
 
@@ -52,14 +52,22 @@ python main.py
 - ✓ Files tab with export tools
 - ✓ Auto-snapshot functionality
 
-**Stage 4 - Settings & Alarm ✓** (NEW!)
+**Stage 4 - Settings & Alarm ✓**
 - ✓ Settings tab with all configuration options
 - ✓ Alarm manager with threshold checking
 - ✓ Alarm latch mechanism to prevent repeated alerts
-- ✓ Sound player with pygame (beep generation)
+- ✓ Sound player with fallback support
 - ✓ Alarm dialogs (Temperature/Humidity alerts)
 - ✓ Alarm system integrated into main controller
 - ✓ Alarm log CSV file
+
+**Stage 5 - Replay ✓**
+- ✓ Replay tab with dedicated controls
+- ✓ CSV file loading for historical data
+- ✓ Playback controls (play/pause/stop/prev/next)
+- ✓ Timeline seek slider and frame indicator
+- ✓ Playback speed control (1x/2x/4x)
+- ✓ Replay integration with Dashboard, Terminal, and statistics
 
 **What You Can Do Now:**
 - ✅ Connect to STM32 via USB (auto-detect CH340/STM)
@@ -71,16 +79,12 @@ python main.py
 - ✅ Automatic CSV/Excel logging with daily folders
 - ✅ Export summary statistics, Excel charts, PNG waveforms
 - ✅ Auto-snapshot at configurable intervals
-- ✅ **Configure serial port, baud rate, storage paths**
-- ✅ **Set temperature/humidity alarm thresholds**
-- ✅ **Receive alarm notifications with sound**
-- ✅ **View alarm history in Alarm_Log.csv**
-
-**Next Stage (Stage 5 - Replay):**
-- CSV file loading
-- Playback controls (play/pause/speed)
-- Timeline scrubbing
-- Full system replay integration
+- ✅ Configure serial port, baud rate, storage paths
+- ✅ Set temperature/humidity alarm thresholds
+- ✅ Receive alarm notifications with sound
+- ✅ View alarm history in Alarm_Log.csv
+- ✅ Load historical CSV and replay data in Replay tab
+- ✅ Control replay timeline and speed (1x/2x/4x)
 
 ## Testing Individual Modules
 
@@ -164,34 +168,37 @@ Format: `DATA,<temperature>,<humidity>,<oled_state>`
 gui/
 ├── main.py                     ✓ Application entry point
 ├── requirements.txt            ✓ Python dependencies (includes pygame)
-├── core/                       ✓ Business logic (STAGES 1-4 COMPLETE)
+├── core/                       ✓ Business logic (STAGES 1-5 COMPLETE)
 │   ├── serial_manager.py       ✓ Serial communication
 │   ├── data_parser.py          ✓ Data parsing
 │   ├── data_store.py           ✓ Data storage
 │   ├── statistics.py           ✓ Statistics calculation
-│   ├── logger.py               ✓ CSV/Excel logging (NEW)
-│   └── alarm_manager.py        ✓ Alarm management (NEW)
-├── ui/                         ✓ User interface (STAGES 1-4 COMPLETE)
+│   ├── logger.py               ✓ CSV/Excel logging
+│   ├── alarm_manager.py        ✓ Alarm management
+│   └── replay_engine.py        ✓ Replay engine (NEW)
+├── ui/                         ✓ User interface (STAGES 1-5 COMPLETE)
 │   ├── main_window.py          ✓ Main window
 │   ├── tabs/
 │   │   ├── dashboard_tab.py    ✓ Dashboard
 │   │   ├── terminal_tab.py     ✓ Terminal
-│   │   ├── files_tab.py        ✓ Files (NEW)
-│   │   └── settings_tab.py     ✓ Settings (NEW)
+│   │   ├── files_tab.py        ✓ Files
+│   │   ├── settings_tab.py     ✓ Settings
+│   │   └── replay_tab.py       ✓ Replay controls (NEW)
 │   ├── widgets/
 │   │   ├── connection_bar.py   ✓ Connection controls
 │   │   ├── waveform_widget.py  ✓ Waveform chart
 │   │   └── stats_panel.py      ✓ Statistics panel
 │   └── dialogs/
-│       └── alarm_dialog.py     ✓ Alarm notifications (NEW)
+│       └── alarm_dialog.py     ✓ Alarm notifications
 ├── controllers/                ✓ Controllers
-│   ├── main_controller.py      ✓ Main controller (with alarm integration)
-│   └── logging_controller.py   ✓ Logging controller (NEW)
+│   ├── main_controller.py      ✓ Main controller (with replay + alarm integration)
+│   ├── logging_controller.py   ✓ Logging controller
+│   └── replay_controller.py    ✓ Replay controller (NEW)
 └── utils/                      ✓ Utilities
     ├── config.py               ✓ Configuration
-    ├── file_utils.py           ✓ File management (NEW)
-    ├── export_utils.py         ✓ Export tools (NEW)
-    └── sound_player.py         ✓ Sound playback (NEW)
+  ├── file_utils.py           ✓ File management
+  ├── export_utils.py         ✓ Export tools
+  └── sound_player.py         ✓ Sound playback
 ```
 
 ## Configuration
@@ -276,4 +283,4 @@ pip install pyqtgraph
   - 方案 3：從 pygame.org 下載預編譯 wheel
 - 檢查音效狀態：啟動應用程式時會顯示使用哪個音效引擎
 
-## Progress: 24/34 Tasks Complete (71%)
+## Progress: Stage 5 Complete
