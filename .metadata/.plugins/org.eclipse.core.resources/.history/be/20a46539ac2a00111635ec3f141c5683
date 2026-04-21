@@ -1,0 +1,122 @@
+#include "button_led.h"
+#include "config.h"
+#include "main.h"
+
+/* 靜態變數定義 */
+static LED_Mode_t g_led_mode = LED_MODE_OFF;
+static ButtonEvent_t g_btn_event = BTN_EVENT_NONE;
+
+static uint8_t g_last_btn = 1;        // 上一次讀取的原始電位
+static uint8_t g_stable_btn = 1;      // 經過去抖動後的穩定電位
+static uint32_t g_last_change_tick = 0;
+static uint32_t g_press_tick = 0;     // 按下開始的時間點
+static uint8_t g_long_reported = 0;   // 是否已觸發長按
+
+/**
+ * @brief 初始化按鈕與 LED 狀態
+ */
+void ButtonLED_Init(void)
+{
+    g_led_mode = LED_MODE_OFF; [cite: 2166]
+    g_btn_event = BTN_EVENT_NONE; [cite: 2168]
+}
+
+/**
+ * @brief 按鈕掃描任務（需在 main loop 週期性呼叫）
+ * 包含去抖動邏輯與長短按判定
+ */
+void Button_Update(void)
+{
+    // 讀取 GPIO 電位 (假設 Pull-up, 按下為 0)
+    uint8_t raw = (HAL_GPIO_ReadPin(BTN_GPIO_Port, BTN_Pin) == GPIO_PIN_SET) ? 1 : 0; [cite: 2171]
+    uint32_t now = HAL_GetTick(); [cite: 2172]
+
+    // 1. 去抖動計時器重置
+    if (raw != g_last_btn)
+    {
+        g_last_change_tick = now; [cite: 2174]
+        g_last_btn = raw; [cite: 2176]
+    }
+
+    // 2. 判定穩定狀態
+    if ((now - g_last_change_tick) >= BUTTON_DEBOUNCE_MS) [cite: 2178]
+    {
+        if (raw != g_stable_btn)
+        {
+            g_stable_btn = raw; [cite: 2182]
+
+            if (g_stable_btn == 0) // 按鈕被按下 (Falling edge)
+            {
+                g_press_tick = now; [cite: 2185]
+                g_long_reported = 0; [cite: 2186]
+            }
+            else // 按鈕放開 (Rising edge)
+            {
+                // 如果放開時還沒觸發過長按，則視為短按
+                if (!g_long_reported)
+                {
+                    g_btn_event = BTN_EVENT_SHORT_PRESS; [cite: 2190]
+                }
+            }
+        }
+    }
+
+    // 3. 長按判定 (按住不放時持續檢查)
+    if (g_stable_btn == 0 && !g_long_reported) [cite: 2194]
+    {
+        if ((now - g_press_tick) >= BUTTON_LONGPRESS_MS) [cite: 2196]
+        {
+            g_btn_event = BTN_EVENT_LONG_PRESS; [cite: 2198]
+            g_long_reported = 1; [cite: 2199]
+        }
+    }
+}
+
+/**
+ * @brief 獲取按鈕事件（讀取後自動清除）
+ */
+ButtonEvent_t Button_GetEvent(void)
+{
+    ButtonEvent_t evt = g_btn_event; [cite: 2205]
+    g_btn_event = BTN_EVENT_NONE; [cite: 2205]
+    return evt; [cite: 2205]
+}
+
+/**
+ * @brief 設定 LED 閃爍模式
+ */
+void LED_SetMode(LED_Mode_t mode)
+{
+    g_led_mode = mode; [cite: 2209]
+}
+
+/**
+ * @brief LED 閃爍驅動任務
+ */
+void LED_Task(void)
+{
+    uint32_t t = HAL_GetTick(); [cite: 2213]
+
+    switch (g_led_mode)
+    {
+        case LED_MODE_OFF: [cite: 2216]
+            HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET); [cite: 2218]
+            break;
+
+        case LED_MODE_IDLE_SLOW_BLINK: // 500ms 慢閃 [cite: 2219]
+            HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, ((t / 500) % 2) ? GPIO_PIN_SET : GPIO_PIN_RESET); [cite: 2220, 2221]
+            break;
+
+        case LED_MODE_RUN_FAST_BLINK: // 200ms 快閃 [cite: 2223]
+            HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, ((t / 200) % 2) ? GPIO_PIN_SET : GPIO_PIN_RESET); [cite: 2224, 2225]
+            break;
+
+        case LED_MODE_LOGGING_ON: // 常亮 [cite: 2227]
+            HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET); [cite: 2228]
+            break;
+
+        default:
+            HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET); [cite: 2231]
+            break;
+    }
+}

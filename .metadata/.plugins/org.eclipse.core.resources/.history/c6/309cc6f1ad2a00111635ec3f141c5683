@@ -1,0 +1,80 @@
+#include "telemetry.h"
+#include "config.h"
+#include "main.h"
+#include <stdio.h>
+#include <string.h>
+
+/* 使用 USART1 作為 PC 通訊介面 (CH340) */
+extern UART_HandleTypeDef huart1;
+
+/**
+ * @brief 計算遙測封包的 Checksum (XOR 運算)
+ * @param payload 待計算的字串內容
+ * @return 計算得到的 8-bit Checksum
+ */
+uint8_t Telemetry_CalcChecksum(const char *payload)
+{
+    uint8_t cs = 0;
+    /* 對 $ 與 * 之間的所有字元做 XOR */
+    for (const char *p = payload; *p; ++p) {
+        cs ^= (uint8_t)(*p);
+    }
+    return cs;
+}
+
+/**
+ * @brief 將紀錄格式化為符合 Telemetry Protocol v1.0 的 ASCII 封包
+ * @param rec 統一遙測紀錄結構體
+ * @param out 輸出緩衝區
+ * @param max_len 緩衝區最大長度
+ */
+bool Telemetry_FormatPacket(const UnifiedTelemetryRecord *rec, char *out, uint16_t max_len)
+{
+    if (!rec || !out || max_len < 32) return false;
+
+    char payload[TELEMETRY_PACKET_BUF_SIZE] = {0};
+
+    /* 格式化封包內容 (不含 $ 與 *CS) */
+    /* 欄位順序：Tick, GPS日期時間, RTC日期時間, 有效性, 定位品質, 衛星數, HDOP, 經緯度, 高度, 速度, 航向 */
+    int n = snprintf(payload, sizeof(payload),
+        "TEL,%lu,%04u%02u%02u,%02u%02u%02u,%04u%02u%02u,%02u%02u%02u,%u,%u,%u,%.2f,%.6f,%.6f,%.2f,%.2f,%.2f,%.2f",
+        (unsigned long)rec->mcu_tick_ms,
+        rec->gps_dt.year, rec->gps_dt.month, rec->gps_dt.day,
+        rec->gps_dt.hour, rec->gps_dt.min, rec->gps_dt.sec,
+        rec->rtc_dt.year, rec->rtc_dt.month, rec->rtc_dt.day,
+        rec->rtc_dt.hour, rec->rtc_dt.min, rec->rtc_dt.sec,
+        rec->gps_valid,
+        rec->fix_quality,
+        rec->satellites,
+        rec->hdop,
+        rec->latitude_deg,
+        rec->longitude_deg,
+        rec->altitude_m,
+        rec->speed_knots,
+        rec->speed_kmh,
+        rec->course_deg); [cite: 1953, 1954, 1955, 1956, 1957, 1958, 1959, 1960, 1961, 1962, 1963, 1964, 1965, 1966, 1967, 1968, 1969, 1970]
+
+    if (n <= 0 || n >= (int)sizeof(payload)) return false;
+
+    /* 計算校驗碼並打包成最終封包格式: $payload*CS\r\n */
+    uint8_t cs = Telemetry_CalcChecksum(payload);
+    n = snprintf(out, max_len, "$%s*%02X\r\n", payload, cs);
+
+    return (n > 0 && n < (int)max_len);
+}
+
+/**
+ * @brief 封裝並透過 USART1 發送遙測封包
+ * @param rec 統一遙測紀錄結構體
+ */
+bool Telemetry_SendPacket(const UnifiedTelemetryRecord *rec)
+{
+    char packet[TELEMETRY_PACKET_BUF_SIZE] = {0};
+
+    if (!Telemetry_FormatPacket(rec, packet, sizeof(packet))) {
+        return false;
+    }
+
+    /* 使用 HAL 阻塞模式發送，超時時間設為 100ms */
+    return HAL_UART_Transmit(&huart1, (uint8_t *)packet, strlen(packet), 100) == HAL_OK;
+}

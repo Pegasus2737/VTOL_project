@@ -1,0 +1,6 @@
+../Core/Src/telemetry_record.c:7:6:TelemetryRecord_Reset	16	static
+../Core/Src/telemetry_record.c:15:6:FusionCache_Reset	16	static
+../Core/Src/telemetry_record.c:23:6:FusionCache_UpdateRMC	24	static
+../Core/Src/telemetry_record.c:33:6:FusionCache_UpdateGGA	24	static
+../Core/Src/telemetry_record.c:43:13:same_utc	32	static
+../Core/Src/telemetry_record.c:60:6:Fusion_TryBuildRecord	24	static

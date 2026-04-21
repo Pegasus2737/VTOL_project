@@ -1,0 +1,16 @@
+typedef struct {
+    uint32_t mcu_tick_ms;
+    RTC_DateTime_t gps_dt;
+    RTC_DateTime_t rtc_dt;
+    uint8_t gps_valid;
+    uint8_t fix_quality;
+    uint8_t satellites;
+    float hdop;
+    double latitude_deg;
+    double longitude_deg;
+    float altitude_m;
+    float speed_knots;
+    float speed_kmh;
+    float course_deg;
+    uint8_t record_ready;
+} UnifiedTelemetryRecord;

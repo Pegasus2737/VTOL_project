@@ -1,0 +1,97 @@
+#ifndef _TELEMETRY_RECORD_H_
+#define _TELEMETRY_RECORD_H_
+
+#include "stm32f1xx_hal.h"
+#include <stdint.h>
+#include <stdbool.h>
+
+/* --- 基礎時間結構體 --- */
+typedef struct
+{
+    uint16_t year;
+    uint8_t  month;
+    uint8_t  day;
+    uint8_t  hour;
+    uint8_t  min;
+    uint8_t  sec;
+} RTC_DateTime_t;
+
+/* --- GPS RMC 原始數據結構 --- */
+typedef struct
+{
+    uint8_t  valid;         // 來自 RMC 狀態 (A/V) [cite: 1070]
+    uint8_t  hour;
+    uint8_t  min;
+    uint8_t  sec;
+    uint8_t  day;
+    uint8_t  month;
+    uint16_t year;
+    double   latitude_deg;  // 十進位緯度 [cite: 1075]
+    double   longitude_deg; // 十進位經度 [cite: 1076]
+    float    speed_knots;   // 地速 (節) [cite: 1080]
+    float    speed_kmh;     // 地速 (km/h) [cite: 1082]
+    float    course_deg;    // 航向角 [cite: 1083]
+} GPS_RMC_t;
+
+/* --- GPS GGA 原始數據結構 --- */
+typedef struct
+{
+    uint8_t  fix_quality;   // 定位品質 (0/1/2) [cite: 1071]
+    uint8_t  satellites;    // 衛星數 [cite: 1073]
+    float    hdop;          // 水平精度因子 [cite: 1074]
+    float    altitude_m;    // 高度 (公尺) [cite: 1079]
+    uint8_t  hour;
+    uint8_t  min;
+    uint8_t  sec;
+    double   latitude_deg;
+    double   longitude_deg;
+} GPS_GGA_t;
+
+/* --- 資料融合快取結構 --- */
+typedef struct
+{
+    GPS_RMC_t rmc;
+    uint8_t   rmc_valid;
+    GPS_GGA_t gga;
+    uint8_t   gga_valid;
+    uint32_t  rmc_arrival_tick; // 記錄資料抵達的系統時間 [cite: 1601]
+    uint32_t  gga_arrival_tick;
+} GPS_FusionCache_t;
+
+/* --- 統一遙測紀錄結構 (最終輸出用) --- */
+typedef struct
+{
+    uint32_t       mcu_tick_ms;    // MCU 毫秒計數 [cite: 1563]
+    RTC_DateTime_t gps_dt;         // GPS 日期時間 [cite: 1564]
+    RTC_DateTime_t rtc_dt;         // RTC 本地日期時間 [cite: 1565]
+    uint8_t        gps_valid;      // 資料有效性標誌 [cite: 1566]
+    uint8_t        fix_quality;    // 定位品質 [cite: 1567]
+    uint8_t        satellites;     // 衛星數 [cite: 1568]
+    float          hdop;           // 水平精度因子 [cite: 1569]
+    double         latitude_deg;   // 緯度 [cite: 1570]
+    double         longitude_deg;  // 經度 [cite: 1571]
+    float          altitude_m;     // 高度 [cite: 1572]
+    float          speed_knots;    // 地速 (節) [cite: 1573]
+    float          speed_kmh;      // 地速 (km/h) [cite: 1574]
+    float          course_deg;     // 航向角 [cite: 1575]
+    uint8_t        rmc_ok;         // RMC 解析成功標誌 [cite: 1576]
+    uint8_t        gga_ok;         // GGA 解析成功標誌 [cite: 1577]
+    uint8_t        record_ready;   // 紀錄準備就緒標誌 [cite: 1578]
+} UnifiedTelemetryRecord;
+
+/* --- 函式原型宣告 --- */
+void TelemetryRecord_Reset(UnifiedTelemetryRecord *rec);
+void FusionCache_Reset(GPS_FusionCache_t *cache);
+void FusionCache_UpdateRMC(GPS_FusionCache_t *cache, const GPS_RMC_t *rmc);
+void FusionCache_UpdateGGA(GPS_FusionCache_t *cache, const GPS_GGA_t *gga);
+
+/**
+ * @brief 嘗試構建統一紀錄
+ * @return true 構建成功且資料同步; false 資料不足或時間不匹配 [cite: 1616, 1617]
+ */
+bool Fusion_TryBuildRecord(GPS_FusionCache_t *cache,
+                           UnifiedTelemetryRecord *rec,
+                           const RTC_DateTime_t *rtc,
+                           uint32_t tick_ms);
+
+#endif /* _TELEMETRY_RECORD_H_ */

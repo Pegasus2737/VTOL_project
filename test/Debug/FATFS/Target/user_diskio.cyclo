@@ -1,0 +1,15 @@
+../FATFS/Target/user_diskio.c:70:13:SD_DebugPrint	1
+../FATFS/Target/user_diskio.c:79:13:SD_SetSpeed	2
+../FATFS/Target/user_diskio.c:107:13:SD_SPI_WriteByte	1
+../FATFS/Target/user_diskio.c:116:16:SD_SPI_ReadByte	1
+../FATFS/Target/user_diskio.c:127:13:SD_CS_Control	2
+../FATFS/Target/user_diskio.c:140:16:SD_WaitResponse	4
+../FATFS/Target/user_diskio.c:157:16:SD_SendCmd_NoCS	3
+../FATFS/Target/user_diskio.c:192:16:SD_SendCmd	1
+../FATFS/Target/user_diskio.c:206:13:SD_MISO_PreCharge	2
+../FATFS/Target/user_diskio.c:234:16:SD_CardInit	16
+../FATFS/Target/user_diskio.c:397:9:USER_initialize	3
+../FATFS/Target/user_diskio.c:423:9:USER_status	2
+../FATFS/Target/user_diskio.c:443:9:USER_read	30
+../FATFS/Target/user_diskio.c:611:9:USER_write	16
+../FATFS/Target/user_diskio.c:727:9:USER_ioctl	6

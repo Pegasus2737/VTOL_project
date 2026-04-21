@@ -1,0 +1,7 @@
+../Core/Src/app.c:38:13:APP_GenerateTestData	4
+../Core/Src/app.c:94:13:enter_state	5
+../Core/Src/app.c:127:13:handle_button	12
+../Core/Src/app.c:157:13:process_gps_queue	11
+../Core/Src/app.c:261:13:output_record	7
+../Core/Src/app.c:283:6:APP_Init	5
+../Core/Src/app.c:346:6:APP_Run	6

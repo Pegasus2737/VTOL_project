@@ -1,0 +1,237 @@
+/**
+ * @file app.c
+ * @brief 系統主應用邏輯與狀態機實作 [cite: 1393, 2270]
+ */
+
+#include "app.h"
+#include "gps.h"
+#include "nmea_parser.h"
+#include "telemetry_record.h"
+#include "telemetry.h"
+#include "sdlog.h"
+#include "rtc_ds3231.h"
+#include "button_led.h"
+#include "error_manager.h"
+#include <stdio.h>
+#include <string.h>
+/* 系統狀態定義 */
+typedef enum {
+    SYS_IDLE = 0,    // 待機模式：僅基本監控
+    SYS_RUN,         // 運行模式：開始傳送遙測數據至 PC
+    SYS_LOGGING      // 記錄模式：同步傳送至 PC 並寫入 SD 卡 [cite: 2280, 2285]
+} AppState_t;
+
+/* 靜態全域變數 [cite: 2286, 2289] */
+static AppState_t           g_state = SYS_IDLE;
+static GPS_FusionCache_t    g_fusion;
+static UnifiedTelemetryRecord g_record;
+static RTC_DateTime_t       g_rtc;
+extern UART_HandleTypeDef huart1;
+/**
+ * @brief 進入新狀態並更新 LED 指示燈模式 [cite: 2290]
+ */
+static void enter_state(AppState_t s) {
+    g_state = s;
+    switch (s) {
+        case SYS_IDLE:
+            LED_SetMode(LED_MODE_IDLE_SLOW_BLINK); // 待機：慢閃
+            break;
+        case SYS_RUN:
+            LED_SetMode(LED_MODE_RUN_FAST_BLINK);  // 運行：快閃
+            break;
+        case SYS_LOGGING:
+            LED_SetMode(LED_MODE_LOGGING_ON);      // 記錄：常亮
+            break;
+    }
+}
+
+/**
+ * @brief 處理按鈕事件觸發狀態切換 [cite: 2302]
+ */
+static void handle_button(void) {
+    ButtonEvent_t evt = Button_GetEvent();
+    if (evt == BTN_EVENT_NONE) return;
+
+    switch (g_state) {
+        case SYS_IDLE:
+            if (evt == BTN_EVENT_SHORT_PRESS)      enter_state(SYS_RUN);
+            else if (evt == BTN_EVENT_LONG_PRESS)  enter_state(SYS_LOGGING);
+            break;
+        case SYS_RUN:
+            if (evt == BTN_EVENT_SHORT_PRESS)      enter_state(SYS_LOGGING);
+            else if (evt == BTN_EVENT_LONG_PRESS)  enter_state(SYS_IDLE);
+            break;
+        case SYS_LOGGING:
+            if (evt == BTN_EVENT_SHORT_PRESS)      enter_state(SYS_RUN);
+            else if (evt == BTN_EVENT_LONG_PRESS)  enter_state(SYS_IDLE);
+            break;
+    }
+}
+
+/* 調試用：上一次輸出診斷的時間 */
+static uint32_t last_gps_diag_time = 0;
+
+// 外部计数器 - 来自中断处理程序
+extern volatile uint32_t g_usart2_irq_count;
+extern volatile uint32_t g_dma_data_received;
+
+/**
+ * @brief 處理 GPS 佇列中的資料並進行解析與融合 [cite: 2316]
+ */
+static void process_gps_queue(void) {
+    GPS_Sentence_t s;
+    static uint32_t sentence_count = 0;
+    
+    while (GPS_QueuePop(&s)) {
+        sentence_count++;
+        
+        // 調試：定期輸出收到的 GPS 原始句子
+        uint32_t now = HAL_GetTick();
+        if ((now - last_gps_diag_time) >= 2000) {  // 每 2 秒輸出一次最後接收到的句子
+            last_gps_diag_time = now;
+            char diag[256] = {0};
+            snprintf(diag, sizeof(diag), "$RAW,cnt=%lu,type=%s\r\n", 
+                     sentence_count,
+                     (strstr(s.sentence, "RMC") ? "RMC" : 
+                      (strstr(s.sentence, "GGA") ? "GGA" : "OTHER")));
+            HAL_UART_Transmit(&huart1, (uint8_t *)diag, strlen(diag), 100);
+        }
+        
+        // 1. 驗證 Checksum [cite: 2321]
+        if (!NMEA_VerifyChecksum(s.sentence)) {
+            ErrorMgr_IncGPSChecksumFail();
+            continue;
+        }
+
+        // 2. 判斷 NMEA 語句類型並解析 [cite: 2326]
+        NMEA_SentenceType_t type = NMEA_GetSentenceType(s.sentence);
+        if (type == NMEA_RMC) {
+            GPS_RMC_t rmc;
+            if (NMEA_ParseRMC(s.sentence, &rmc))
+                FusionCache_UpdateRMC(&g_fusion, &rmc);
+            else
+                ErrorMgr_IncGPSParseFail();
+        }
+        else if (type == NMEA_GGA) {
+            GPS_GGA_t gga;
+            if (NMEA_ParseGGA(s.sentence, &gga))
+                FusionCache_UpdateGGA(&g_fusion, &gga);
+            else
+                ErrorMgr_IncGPSParseFail();
+        }
+
+        // 3. 讀取 RTC 並嘗試構建完整遙測紀錄 [cite: 2344, 2346]
+        if (!RTC_DS3231_ReadDateTime(&g_rtc))
+            ErrorMgr_IncRTCReadFail();
+
+        Fusion_TryBuildRecord(&g_fusion, &g_record, &g_rtc, HAL_GetTick());
+    }
+}
+
+/**
+ * @brief 根據當前狀態輸出遙測紀錄 (雙路輸出邏輯) [cite: 2348]
+ */
+static void output_record(void) {
+    // 調試：無法融合時輸出診斷信息
+    if (!g_record.record_ready && (g_state == SYS_RUN || g_state == SYS_LOGGING)) {
+        static uint32_t last_diag_time = 0;
+        uint32_t now = HAL_GetTick();
+        if ((now - last_diag_time) >= 1000) {  // 每 1 秒輸出一次
+            last_diag_time = now;
+            SystemErrorCounters_t errs = ErrorMgr_GetCounters();
+            char diag[256] = {0};
+            // 只要有任何 GPS 接收，RTC 应该被读取
+            snprintf(diag, sizeof(diag),
+                "$DIAG,rmc_v=%u,gga_v=%u,rmc_sec=%u,rmc_lat=%.4f,chksum=%lu\r\n",
+                g_fusion.rmc_valid, g_fusion.gga_valid, g_fusion.rmc.sec, g_fusion.rmc.latitude_deg,
+                errs.gps_checksum_fail_count);
+            HAL_UART_Transmit(&huart1, (uint8_t *)diag, strlen(diag), 100);
+        }
+        return;
+    }
+
+    if (!g_record.record_ready) return;
+
+    // 路徑 A：USART1 傳送至 PC GUI [cite: 2352, 2354]
+    if (g_state == SYS_RUN || g_state == SYS_LOGGING) {
+        if (!Telemetry_SendPacket(&g_record))
+            ErrorMgr_IncUARTTxFail();
+    }
+
+    // 路徑 B：SPI1 寫入 SD 卡 [cite: 2357, 2359]
+    if (g_state == SYS_LOGGING) {
+        if (!SDLog_AppendRecord(&g_record))
+            ErrorMgr_IncSDWriteFail();
+    }
+
+    g_record.record_ready = 0; // 重置準備標記 [cite: 2362]
+}
+
+/**
+ * @brief 應用程式初始化 [cite: 2363]
+ */
+void APP_Init(void) {
+    ErrorMgr_Init();
+    ButtonLED_Init();
+    GPS_Init();
+    FusionCache_Reset(&g_fusion);
+    TelemetryRecord_Reset(&g_record);
+    RTC_DS3231_Init();
+
+    // SD 卡初始化 [cite: 2372]
+    if (!SDLog_Init())
+        ErrorMgr_IncSDMountFail();
+
+    // 建立當日檔案 [cite: 2374, 2377]
+    if (RTC_DS3231_ReadDateTime(&g_rtc)) {
+        if (SDLog_OpenDailyFile(&g_rtc))
+            SDLog_WriteHeaderIfNeeded();
+    }
+
+    GPS_StartReception(); // 開始 DMA 接收 [cite: 2379]
+    enter_state(SYS_IDLE);
+}
+
+/**
+ * @brief 應用程式主循環任務 [cite: 2381]
+ */
+void APP_Run(void) {
+    static uint32_t last_early_diag = 0;
+    static uint32_t test_poll_start = 0;
+    
+    Button_Update();        // 按鈕掃描 [cite: 2383]
+    LED_Task();             // 指示燈任務 [cite: 2384]
+    handle_button();        // 處理按鈕事件 [cite: 2385]
+
+    GPS_ProcessRxChunk();   // 處理 DMA 資料區塊 [cite: 2386]
+    GPS_SplitLinesToQueue(); // NMEA 斷句 [cite: 2387]
+
+    process_gps_queue();    // 解析與融合 [cite: 2388]
+    
+    // 如果在 SYS_RUN 狀態還沒有輸出，則輸出診斷
+    if (!g_record.record_ready && (g_state == SYS_RUN || g_state == SYS_LOGGING)) {
+        uint32_t now = HAL_GetTick();
+        if ((now - last_early_diag) >= 3000) {  // 每 3 秒輸出
+            last_early_diag = now;
+            
+            // 診斷 1: 檢查 DMA 是否在接收
+            extern DMA_HandleTypeDef hdma_usart2_rx;
+            extern volatile uint32_t g_usart2_irq_count;
+            uint16_t dma_cnt = __HAL_DMA_GET_COUNTER(&hdma_usart2_rx);
+            
+            // 診斷 2: 檢查 USART2 硬體狀態標誌
+            uint32_t sr = huart2.Instance->SR;
+            uint8_t has_idle = (sr & UART_FLAG_IDLE) ? 1 : 0;
+            uint8_t has_rxne = (sr & UART_FLAG_RXNE) ? 1 : 0;
+            uint8_t has_tc = (sr & UART_FLAG_TC) ? 1 : 0;
+            
+            char diag[128] = {0};
+            snprintf(diag, sizeof(diag), 
+                "$HW,irq=%lu,dma=%u,idle=%u,rxne=%u,tc=%u\r\n",
+                g_usart2_irq_count, dma_cnt, has_idle, has_rxne, has_tc);
+            HAL_UART_Transmit(&huart1, (uint8_t *)diag, strlen(diag), 100);
+        }
+    }
+    
+    output_record();        // 輸出結果 [cite: 2389]
+}

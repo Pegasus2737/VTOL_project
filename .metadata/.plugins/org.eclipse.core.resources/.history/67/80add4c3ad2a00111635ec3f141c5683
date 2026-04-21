@@ -1,0 +1,125 @@
+#include "sdlog.h"
+#include "config.h"
+#include "fatfs.h"
+#include <stdio.h>
+#include <string.h>
+
+/* 模組靜態變數 */
+static FATFS g_fs;                          // FatFs 檔案系統物件 [cite: 2003]
+static FIL g_file;                          // 檔案物件 [cite: 2004]
+static char g_filename[LOG_FILENAME_BUF_SIZE]; // 儲存當前檔名 [cite: 2005]
+static uint8_t g_file_opened = 0;           // 檔案開啟狀態旗標 [cite: 2006]
+static uint32_t g_record_counter = 0;       // 記錄筆數計數器，用於觸發 f_sync [cite: 2007]
+
+/* CSV 標頭定義 [cite: 2008, 2009] */
+static const char *csv_header =
+    "mcu_tick_ms,gps_date,gps_time,rtc_date,rtc_time,gps_valid,fix_quality,"
+    "satellites,hdop,latitude_deg,longitude_deg,altitude_m,speed_knots,"
+    "speed_kmh,course_deg,rmc_ok,gga_ok\r\n";
+
+/**
+ * @brief 初始化 SD 卡並掛載檔案系統
+ */
+bool SDLog_Init(void) {
+    // 掛載邏輯磁碟機，1 表示立即掛載 [cite: 2012]
+    return f_mount(&g_fs, "", 1) == FR_OK;
+}
+
+/**
+ * @brief 根據日期建立或開啟 CSV 檔案
+ */
+bool SDLog_OpenDailyFile(const RTC_DateTime_t *dt) {
+    if (!dt) return false; [cite: 2016]
+
+    // 格式化檔名，例如: GPS_20260324.CSV [cite: 2017, 2018, 2019]
+    snprintf(g_filename, sizeof(g_filename), "GPS_%04u%02u%02u.CSV",
+             dt->year, dt->month, dt->day);
+
+    // 以「總是開啟並具備寫入權限」模式打開檔案 [cite: 2020]
+    if (f_open(&g_file, g_filename, FA_OPEN_ALWAYS | FA_WRITE) != FR_OK) {
+        return false; [cite: 2021]
+    }
+
+    // 將檔案指標移至末尾以便續寫 [cite: 2023]
+    if (f_lseek(&g_file, f_size(&g_file)) != FR_OK) {
+        f_close(&g_file); [cite: 2025]
+        return false; [cite: 2026]
+    }
+
+    g_file_opened = 1; [cite: 2028]
+    return true; [cite: 2029]
+}
+
+/**
+ * @brief 若檔案為空，則寫入 CSV 標頭
+ */
+bool SDLog_WriteHeaderIfNeeded(void) {
+    if (!g_file_opened) return false; [cite: 2032]
+
+    if (f_size(&g_file) == 0) { [cite: 2033]
+        UINT bw = 0; [cite: 2035]
+        // 寫入標頭字串 [cite: 2036]
+        if (f_write(&g_file, csv_header, strlen(csv_header), &bw) != FR_OK) {
+            return false; [cite: 2036, 2037]
+        }
+        if (bw != strlen(csv_header)) return false; [cite: 2038]
+
+        // 立即同步，確保標頭寫入物理磁區 [cite: 2039]
+        if (f_sync(&g_file) != FR_OK) return false;
+    }
+    return true; [cite: 2041]
+}
+
+/**
+ * @brief 將遙測紀錄轉換為 CSV 字串格式
+ */
+bool SDLog_FormatCSVLine(const UnifiedTelemetryRecord *rec, char *out, uint16_t max_len) {
+    if (!rec || !out) return false; [cite: 2046]
+
+    int n = snprintf(out, max_len,
+        "%lu,%04u%02u%02u,%02u%02u%02u,%04u%02u%02u,%02u%02u%02u,%u,%u,%u,"
+        "%.2f,%.6f,%.6f,%.2f,%.2f,%.2f,%.2f,%u,%u\r\n",
+        (unsigned long)rec->mcu_tick_ms, [cite: 2050]
+        rec->gps_dt.year, rec->gps_dt.month, rec->gps_dt.day, [cite: 2051]
+        rec->gps_dt.hour, rec->gps_dt.min, rec->gps_dt.sec, [cite: 2052]
+        rec->rtc_dt.year, rec->rtc_dt.month, rec->rtc_dt.day, [cite: 2053]
+        rec->rtc_dt.hour, rec->rtc_dt.min, rec->rtc_dt.sec, [cite: 2054]
+        rec->gps_valid, rec->fix_quality, rec->satellites, [cite: 2055, 2056, 2057]
+        rec->hdop, rec->latitude_deg, rec->longitude_deg, [cite: 2058, 2059, 2060]
+        rec->altitude_m, rec->speed_knots, rec->speed_kmh, [cite: 2061, 2062, 2063]
+        rec->course_deg, rec->rmc_ok, rec->gga_ok); [cite: 2064, 2065, 2066]
+
+    return (n > 0 && n < (int)max_len); [cite: 2067]
+}
+
+/**
+ * @brief 新增一筆記錄到 SD 卡
+ */
+bool SDLog_AppendRecord(const UnifiedTelemetryRecord *rec) {
+    if (!g_file_opened || !rec) return false; [cite: 2071]
+
+    char line[CSV_LINE_BUF_SIZE] = {0}; [cite: 2072]
+    if (!SDLog_FormatCSVLine(rec, line, sizeof(line))) return false; [cite: 2073]
+
+    UINT bw = 0; [cite: 2074]
+    // 執行寫入動作 [cite: 2075]
+    if (f_write(&g_file, line, strlen(line), &bw) != FR_OK) return false;
+    if (bw != strlen(line)) return false; [cite: 2075]
+
+    g_record_counter++; [cite: 2076]
+
+    // 根據設定頻率定期執行 f_sync，平衡效能與資料安全 [cite: 2077]
+    if ((g_record_counter % SDLOG_FLUSH_EVERY_N_RECORDS) == 0) {
+        return SDLog_Flush(); [cite: 2078]
+    }
+
+    return true; [cite: 2079]
+}
+
+/**
+ * @brief 強制同步緩衝區資料到 SD 卡
+ */
+bool SDLog_Flush(void) {
+    if (!g_file_opened) return false; [cite: 2083]
+    return f_sync(&g_file) == FR_OK; [cite: 2084]
+}

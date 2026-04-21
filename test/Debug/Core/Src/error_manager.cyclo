@@ -1,0 +1,8 @@
+../Core/Src/error_manager.c:10:6:ErrorMgr_Init	1
+../Core/Src/error_manager.c:17:6:ErrorMgr_IncGPSChecksumFail	1
+../Core/Src/error_manager.c:24:6:ErrorMgr_IncGPSParseFail	1
+../Core/Src/error_manager.c:31:6:ErrorMgr_IncRTCReadFail	1
+../Core/Src/error_manager.c:38:6:ErrorMgr_IncSDMountFail	1
+../Core/Src/error_manager.c:45:6:ErrorMgr_IncSDWriteFail	1
+../Core/Src/error_manager.c:52:6:ErrorMgr_IncUARTTxFail	1
+../Core/Src/error_manager.c:60:23:ErrorMgr_GetCounters	1

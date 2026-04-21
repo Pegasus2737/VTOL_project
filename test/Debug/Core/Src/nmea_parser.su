@@ -1,0 +1,11 @@
+../Core/Src/nmea_parser.c:10:12:hex2int	24	static
+../Core/Src/nmea_parser.c:19:6:NMEA_VerifyChecksum	40	static
+../Core/Src/nmea_parser.c:39:21:NMEA_GetSentenceType	16	static
+../Core/Src/nmea_parser.c:48:13:parse_utc	32	static
+../Core/Src/nmea_parser.c:59:13:parse_date	32	static
+../Core/Src/nmea_parser.c:70:8:NMEA_ConvertLatitude	64	static
+../Core/Src/nmea_parser.c:81:8:NMEA_ConvertLongitude	64	static
+../Core/Src/nmea_parser.c:92:7:NMEA_KnotsToKmh	16	static
+../Core/Src/nmea_parser.c:98:12:split_fields	32	static
+../Core/Src/nmea_parser.c:115:5:NMEA_ParseRMC	264	static
+../Core/Src/nmea_parser.c:144:5:NMEA_ParseGGA	264	static

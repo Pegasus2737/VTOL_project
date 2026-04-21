@@ -1,0 +1,7 @@
+bool Fusion_TryBuildRecord(GPS_FusionCache_t *cache, UnifiedTelemetryRecord *rec, const RTC_DateTime_t *rtc, uint32_t tick_ms) {
+    if (!cache->rmc_valid || !cache->gga_valid) return false; [cite: 1616]
+    if (!same_utc(cache)) return false; // 確保 RMC/GGA 時間同步 [cite: 1617]
+    // ... 欄位填寫邏輯 ...
+    rec->record_ready = 1; [cite: 1642]
+    return true;
+}

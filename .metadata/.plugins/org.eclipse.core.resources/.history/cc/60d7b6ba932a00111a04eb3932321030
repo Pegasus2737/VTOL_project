@@ -1,0 +1,84 @@
+#include "button_led.h"
+#include "config.h"
+#include "main.h"
+static LED_Mode_t g_led_mode = LED_MODE_OFF;
+static ButtonEvent_t g_btn_event = BTN_EVENT_NONE;
+static uint8_t g_last_btn = 1;
+static uint8_t g_stable_btn = 1;
+static uint32_t g_last_change_tick = 0;
+static uint32_t g_press_tick = 0;
+static uint8_t g_long_reported = 0;
+void ButtonLED_Init(void)
+{
+g_led_mode = LED_MODE_OFF;
+g_btn_event = BTN_EVENT_NONE;
+}
+void Button_Update(void)
+{
+uint8_t raw = (HAL_GPIO_ReadPin(BTN_GPIO_Port, BTN_Pin) ==
+GPIO_PIN_SET) ? 1 : 0;
+uint32_t now = HAL_GetTick();
+if (raw != g_last_btn)
+{
+g_last_change_tick = now;
+g_last_btn = raw;
+}
+if ((now - g_last_change_tick) >= BUTTON_DEBOUNCE_MS)
+{
+if (raw != g_stable_btn)
+{
+g_stable_btn = raw;
+if (g_stable_btn == 0)
+{
+g_press_tick = now;
+g_long_reported = 0;
+}
+else
+{
+}
+}
+}
+if (!g_long_reported) g_btn_event = BTN_EVENT_SHORT_PRESS;
+if (g_stable_btn == 0 && !g_long_reported)
+{
+if ((now - g_press_tick) >= BUTTON_LONGPRESS_MS)
+{
+g_btn_event = BTN_EVENT_LONG_PRESS;
+g_long_reported = 1;
+}
+}
+}
+ButtonEvent_t Button_GetEvent(void)
+{
+ButtonEvent_t evt = g_btn_event;
+g_btn_event = BTN_EVENT_NONE;
+return evt;
+}
+void LED_SetMode(LED_Mode_t mode)
+{
+g_led_mode = mode;
+}
+void LED_Task(void)
+{
+uint32_t t = HAL_GetTick();
+switch (g_led_mode)
+{
+case LED_MODE_OFF:
+HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+break;
+case LED_MODE_IDLE_SLOW_BLINK:
+HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, ((t / 500) % 2) ?
+GPIO_PIN_SET : GPIO_PIN_RESET);
+break;
+case LED_MODE_RUN_FAST_BLINK:
+HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, ((t / 200) % 2) ?
+GPIO_PIN_SET : GPIO_PIN_RESET);
+break;
+case LED_MODE_LOGGING_ON:
+HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+break;
+default:
+HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+break;
+}
+}

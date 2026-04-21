@@ -1,0 +1,3 @@
+../Core/Src/telemetry.c:15:9:Telemetry_CalcChecksum	2
+../Core/Src/telemetry.c:31:6:Telemetry_FormatPacket	8
+../Core/Src/telemetry.c:70:6:Telemetry_SendPacket	2
