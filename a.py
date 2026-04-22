@@ -19,6 +19,11 @@ try:
 except ImportError:
     SERIAL_AVAILABLE = False
 
+MAX_RECORDS = 1200
+POLL_INTERVAL_MS = 100
+PLOT_UPDATE_INTERVAL_MS = 250
+MAX_QUEUE_ITEMS_PER_POLL = 200
+
 # ============================================================
 # 1. 資料結構定義
 # ============================================================
@@ -27,16 +32,20 @@ except ImportError:
 class SystemStats:
     """統計通訊與解析狀態"""
     rx_lines: int = 0
+    non_tel_lines: int = 0
     valid_packets: int = 0
     checksum_fail: int = 0
     parse_fail: int = 0
 
 @dataclasses.dataclass
 class UnifiedTelemetryRecord:
-    """統一遙測資料格式 - 對應 16 個欄位"""
+    """統一遙測資料格式 - 對應 STM32 $TEL 欄位"""
     timestamp: str  # 時間戳
     mcu_tick_ms: int
-    time_utc: str
+    gps_date: str
+    gps_time: str
+    rtc_date: str
+    rtc_time: str
     gps_valid: int
     fix_quality: int
     satellites: int
@@ -44,17 +53,18 @@ class UnifiedTelemetryRecord:
     latitude_deg: float
     longitude_deg: float
     altitude_m: float
-    geoid_height: float
+    speed_knots: float
     speed_kmh: float
     course_deg: float
     
     def to_csv_row(self):
         """轉換為 CSV 行"""
         return [
-            self.timestamp, self.mcu_tick_ms, self.time_utc,
+            self.timestamp, self.mcu_tick_ms,
+            self.gps_date, self.gps_time, self.rtc_date, self.rtc_time,
             self.gps_valid, self.fix_quality, self.satellites,
             self.hdop, self.latitude_deg, self.longitude_deg,
-            self.altitude_m, self.geoid_height, self.speed_kmh, self.course_deg
+            self.altitude_m, self.speed_knots, self.speed_kmh, self.course_deg
         ]
 
 class TelParser:
@@ -64,12 +74,18 @@ class TelParser:
     def parse_line(line: str) -> UnifiedTelemetryRecord:
         """
         解析 $TEL 封包並驗證 Checksum
-        格式: $TEL,field1,field2,...,field16*CS\r\n
+        格式: $TEL,tick,gps_date,gps_time,rtc_date,rtc_time,gps_valid,
+             fix_quality,satellites,hdop,lat,lon,alt,speed_knots,speed_kmh,course*CS\r\n
         """
         line = line.strip()
+
+        # 某些情況下串流前面可能夾帶雜訊字元，嘗試從 $TEL 起點恢復
+        tel_pos = line.find("$TEL,")
+        if tel_pos > 0:
+            line = line[tel_pos:]
         
         # 檢查 Header
-        if not line.startswith("$TEL"):
+        if not line.startswith("$TEL,"):
             raise ValueError("Invalid Header: must start with $TEL")
         
         # 檢查 Checksum
@@ -77,7 +93,7 @@ class TelParser:
             raise ValueError("No Checksum found")
         
         # 分離 Payload 和 Checksum
-        payload, expected_cs = line[1:].split("*")  # 移除 $ 符號
+        payload, expected_cs = line[1:].split("*", 1)  # 移除 $ 符號
         
         # 計算 Checksum (XOR)
         calc_cs = 0
@@ -90,24 +106,27 @@ class TelParser:
         # 解析欄位
         fields = payload.split(",")
         
-        if len(fields) < 17:  # 包括 TEL 標籤
-            raise ValueError(f"Not enough fields: got {len(fields)}, expected 17")
+        if len(fields) < 16:  # 包含 TEL 標籤 + 15 個資料欄位
+            raise ValueError(f"Not enough fields: got {len(fields)}, expected 16")
         
         try:
             record = UnifiedTelemetryRecord(
                 timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
                 mcu_tick_ms=int(fields[1]),
-                time_utc=fields[2],
-                gps_valid=int(fields[3]),
-                fix_quality=int(fields[4]),
-                satellites=int(fields[5]),
-                hdop=float(fields[6]),
-                latitude_deg=float(fields[7]),
-                longitude_deg=float(fields[8]),
-                altitude_m=float(fields[9]),
-                geoid_height=float(fields[10]),
-                speed_kmh=float(fields[11]),
-                course_deg=float(fields[12])
+                gps_date=fields[2],
+                gps_time=fields[3],
+                rtc_date=fields[4],
+                rtc_time=fields[5],
+                gps_valid=int(fields[6]),
+                fix_quality=int(fields[7]),
+                satellites=int(fields[8]),
+                hdop=float(fields[9]),
+                latitude_deg=float(fields[10]),
+                longitude_deg=float(fields[11]),
+                altitude_m=float(fields[12]),
+                speed_knots=float(fields[13]),
+                speed_kmh=float(fields[14]),
+                course_deg=float(fields[15])
             )
             return record
         except (ValueError, IndexError) as e:
@@ -176,9 +195,10 @@ class CSVLogger:
             with open(self.csv_file, 'w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'Timestamp', 'MCU_Tick_ms', 'Time_UTC',
+                    'Timestamp', 'MCU_Tick_ms',
+                    'GPS_Date', 'GPS_Time', 'RTC_Date', 'RTC_Time',
                     'GPS_Valid', 'Fix_Quality', 'Satellites', 'HDOP',
-                    'Latitude', 'Longitude', 'Altitude_m', 'Geoid_Height',
+                    'Latitude', 'Longitude', 'Altitude_m', 'Speed_knots',
                     'Speed_kmh', 'Course_deg'
                 ])
     
@@ -212,6 +232,7 @@ class App(tk.Tk):
         self.stop_event = threading.Event()
         self.auto_save = False
         self.auto_map = False
+        self.last_plot_update_ts = 0.0
         
         # 配置文件讀取
         self.config = self._load_config()
@@ -226,7 +247,7 @@ class App(tk.Tk):
         self._setup_plots()
         
         # 啟動輪詢
-        self.after(100, self.poll_queue)
+        self.after(POLL_INTERVAL_MS, self.poll_queue)
         
         # 視窗關閉協定
         self.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -274,6 +295,9 @@ class App(tk.Tk):
         
         self.disconnect_btn = ttk.Button(control_frame, text="Disconnect", command=self.disconnect_serial, state=tk.DISABLED)
         self.disconnect_btn.pack(side=tk.LEFT, padx=2)
+
+        self.clear_btn = ttk.Button(control_frame, text="Clear Data", command=self.clear_data)
+        self.clear_btn.pack(side=tk.LEFT, padx=2)
         
         ttk.Separator(control_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
@@ -289,7 +313,7 @@ class App(tk.Tk):
         # 統計信息
         ttk.Separator(control_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
-        self.stat_label = tk.StringVar(value="RX:0 | Valid:0 | CRC Fail:0 | Parse Fail:0")
+        self.stat_label = tk.StringVar(value="RX:0 | TEL:0 | Valid:0 | CRC Fail:0 | Parse Fail:0")
         stat_display = ttk.Label(control_frame, textvariable=self.stat_label)
         stat_display.pack(side=tk.LEFT, padx=5)
         
@@ -335,6 +359,7 @@ class App(tk.Tk):
         self.ax_sat.set_xlabel("Sample #")
         self.ax_sat.set_ylabel("Count / Value")
         self.ax_sat.grid(True)
+        self.ax_sat_hdop = self.ax_sat.twinx()
         
         # 高度時間序列 (右下)
         self.ax_alt = self.fig.add_subplot(235)
@@ -407,30 +432,50 @@ class App(tk.Tk):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.terminal.insert(tk.END, f"[{timestamp}] {message}\n")
         self.terminal.see(tk.END)
-        self.terminal.update()
+
+    def clear_data(self):
+        """清除累積資料，降低重繪負擔"""
+        self.records.clear()
+        self.stats = SystemStats()
+        self._update_stats()
+        self.status_text.set("Data cleared")
+        self._redraw_all(force_clear=True)
+        self.append_terminal("[INFO] Data cleared")
     
     def poll_queue(self):
         """輪詢數據隊列"""
+        parsed_new_record = False
+        processed = 0
         try:
-            while True:
+            while processed < MAX_QUEUE_ITEMS_PER_POLL:
                 kind, payload = self.q.get_nowait()
+                processed += 1
                 
                 if kind == "line":
                     self.stats.rx_lines += 1
-                    if not payload.strip():
+                    line = payload.strip()
+                    if not line:
+                        continue
+
+                    # STM32 的 USART1 可能同時輸出 [DBG]/[TEST] 與 $TEL。
+                    # 非 $TEL 行不視為解析錯誤，避免污染 Parse Fail 統計。
+                    if not line.startswith("$TEL,"):
+                        self.stats.non_tel_lines += 1
+                        self._update_stats()
                         continue
                     
                     try:
-                        rec = TelParser.parse_line(payload)
+                        rec = TelParser.parse_line(line)
                         self.records.append(rec)
+                        if len(self.records) > MAX_RECORDS:
+                            # 只保留最近 N 筆，避免長時間運行導致重繪越來越慢
+                            self.records = self.records[-MAX_RECORDS:]
                         self.stats.valid_packets += 1
+                        parsed_new_record = True
                         
                         # CSV 記錄
                         if self.auto_save_var.get() and self.csv_logger:
                             self.csv_logger.write(rec)
-                        
-                        # 更新圖表
-                        self._redraw_all()
                         
                         # 更新狀態
                         self._update_stats()
@@ -460,21 +505,51 @@ class App(tk.Tk):
                     
         except queue.Empty:
             pass
+
+        now = time.monotonic()
+        if parsed_new_record and (now - self.last_plot_update_ts) * 1000.0 >= PLOT_UPDATE_INTERVAL_MS:
+            self._redraw_all()
+            self.last_plot_update_ts = now
         
-        self.after(100, self.poll_queue)
+        self.after(POLL_INTERVAL_MS, self.poll_queue)
     
     def _update_stats(self):
         """更新統計信息標籤"""
+        tel_lines = self.stats.rx_lines - self.stats.non_tel_lines
         self.stat_label.set(
             f"RX:{self.stats.rx_lines} | "
+            f"TEL:{tel_lines} | "
             f"Valid:{self.stats.valid_packets} | "
             f"CRC Fail:{self.stats.checksum_fail} | "
             f"Parse Fail:{self.stats.parse_fail}"
         )
     
-    def _redraw_all(self):
+    def _redraw_all(self, force_clear: bool = False):
         """重新繪製所有圖表"""
         if len(self.records) == 0:
+            if force_clear:
+                for ax in [self.ax_track, self.ax_speed, self.ax_sat, self.ax_alt, self.ax_quality]:
+                    ax.clear()
+                    ax.grid(True, alpha=0.3)
+                self.ax_sat_hdop.clear()
+                self.ax_track.set_title("2D Trajectory")
+                self.ax_track.set_xlabel("Longitude")
+                self.ax_track.set_ylabel("Latitude")
+                self.ax_speed.set_title("Speed (km/h)")
+                self.ax_speed.set_xlabel("Sample #")
+                self.ax_speed.set_ylabel("Speed")
+                self.ax_sat.set_title("Satellites & HDOP")
+                self.ax_sat.set_xlabel("Sample #")
+                self.ax_sat.set_ylabel("Count / Value")
+                self.ax_sat_hdop.set_ylabel("HDOP")
+                self.ax_alt.set_title("Altitude (m)")
+                self.ax_alt.set_xlabel("Sample #")
+                self.ax_alt.set_ylabel("Altitude")
+                self.ax_quality.set_title("Fix Quality")
+                self.ax_quality.set_xlabel("Sample #")
+                self.ax_quality.set_ylabel("Quality")
+                self.fig.tight_layout()
+                self.canvas.draw_idle()
             return
         
         self._redraw_track()
@@ -510,6 +585,7 @@ class App(tk.Tk):
         # 清空所有子圖
         for ax in [self.ax_speed, self.ax_sat, self.ax_alt, self.ax_quality]:
             ax.clear()
+        self.ax_sat_hdop.clear()
         
         # 準備數據
         sample_nums = list(range(len(self.records)))
@@ -528,13 +604,12 @@ class App(tk.Tk):
         self.ax_speed.grid(True, alpha=0.3)
         
         # 衛星 / HDOP 圖
-        ax2_sat = self.ax_sat.twinx()
         self.ax_sat.plot(sample_nums, sats, color='green', linewidth=2, label='Satellites')
-        ax2_sat.plot(sample_nums, hdops, color='orange', linewidth=1.5, label='HDOP', linestyle='--')
+        self.ax_sat_hdop.plot(sample_nums, hdops, color='orange', linewidth=1.5, label='HDOP', linestyle='--')
         self.ax_sat.set_title("Satellites & HDOP")
         self.ax_sat.set_xlabel("Sample #")
         self.ax_sat.set_ylabel("Satellites", color='green')
-        ax2_sat.set_ylabel("HDOP", color='orange')
+        self.ax_sat_hdop.set_ylabel("HDOP", color='orange')
         self.ax_sat.grid(True, alpha=0.3)
         self.ax_sat.legend(loc='upper left')
         
