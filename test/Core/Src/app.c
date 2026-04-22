@@ -40,8 +40,8 @@ static void APP_GenerateTestData(void) {
     static uint32_t last_gen_time = 0;
     uint32_t now = HAL_GetTick();
     
-    // 每 100ms 生成一筆虛擬數據
-    if ((now - last_gen_time) < 100) return;
+    // 依照遙測頻率產生虛擬資料，避免無效高頻更新
+    if ((now - last_gen_time) < TELEMETRY_TX_INTERVAL_MS) return;
     last_gen_time = now;
     
     test_counter++;
@@ -259,8 +259,15 @@ static void process_gps_queue(void) {
     }
 }
 static void output_record(void) {
+    static uint32_t last_tx_tick = 0;
+
     // 如果无法融合则直接返回
     if (!g_record.record_ready) return;
+
+    // 統一遙測/記錄輸出節流：避免高頻重複資料淹沒上位機
+    uint32_t now = HAL_GetTick();
+    if ((uint32_t)(now - last_tx_tick) < TELEMETRY_TX_INTERVAL_MS) return;
+    last_tx_tick = now;
 
     // 路径 A：USART1 传送至 PC GUI [cite: 2352, 2354]
     if (g_state == SYS_RUN || g_state == SYS_LOGGING) {
