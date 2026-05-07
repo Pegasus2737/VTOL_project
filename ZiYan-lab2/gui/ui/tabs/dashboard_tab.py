@@ -13,12 +13,11 @@ Integrates:
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QLabel, QGroupBox, QPushButton, QFrame
+    QLabel, QGroupBox, QPushButton
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from ui.widgets.waveform_widget import WaveformWidget
-from ui.widgets.stats_panel import StatsPanel
 
 
 class DashboardTab(QWidget):
@@ -40,18 +39,9 @@ class DashboardTab(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
         
-        # Top section: Current values and stats
-        top_layout = QHBoxLayout()
-        
-        # Current values display
-        current_values_widget = self._create_current_values_widget()
-        top_layout.addWidget(current_values_widget, stretch=2)
-        
-        # Statistics panel
-        self.stats_panel = StatsPanel()
-        top_layout.addWidget(self.stats_panel, stretch=1)
-        
-        layout.addLayout(top_layout, stretch=1)
+        # Top section: 3 columns x 2 rows cards
+        top_grid = self._create_top_grid_widget()
+        layout.addWidget(top_grid, stretch=2)
         
         # Waveform chart
         self.waveform = WaveformWidget(history_minutes=5)
@@ -61,16 +51,17 @@ class DashboardTab(QWidget):
         control_layout = self._create_control_layout()
         layout.addLayout(control_layout)
     
-    def _create_current_values_widget(self) -> QWidget:
-        """
-        Create current values display widget
-        
-        Returns:
-            QWidget: Current values widget
-        """
+    def _create_top_grid_widget(self) -> QWidget:
+        """Create top dashboard cards in a 3x2 grid."""
         widget = QWidget()
         layout = QGridLayout(widget)
-        layout.setSpacing(15)
+        layout.setSpacing(10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        for col in range(3):
+            layout.setColumnStretch(col, 1)
+        for row in range(2):
+            layout.setRowStretch(row, 1)
         
         # Title font
         title_font = QFont()
@@ -86,7 +77,7 @@ class DashboardTab(QWidget):
         unit_font = QFont()
         unit_font.setPointSize(14)
         
-        # Temperature display
+        # Temperature current
         temp_group = QGroupBox("Temperature")
         temp_group.setStyleSheet("""
             QGroupBox {
@@ -118,7 +109,7 @@ class DashboardTab(QWidget):
         
         layout.addWidget(temp_group, 0, 0)
         
-        # Humidity display
+        # Humidity current
         humi_group = QGroupBox("Humidity")
         humi_group.setStyleSheet("""
             QGroupBox {
@@ -151,12 +142,129 @@ class DashboardTab(QWidget):
         layout.addWidget(humi_group, 0, 1)
         
         # OLED status
-        oled_label = QLabel("OLED Status:")
-        layout.addWidget(oled_label, 1, 0)
+        oled_group = QGroupBox("OLED Status")
+        oled_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #95a5a6;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                color: #95a5a6;
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        oled_layout = QVBoxLayout(oled_group)
         
         self.oled_status_label = QLabel("--")
-        self.oled_status_label.setFont(title_font)
-        layout.addWidget(self.oled_status_label, 1, 1)
+        self.oled_status_label.setFont(value_font)
+        self.oled_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.oled_status_label.setStyleSheet("color: #7f8c8d; font-weight: bold;")
+        oled_layout.addWidget(self.oled_status_label)
+
+        oled_hint = QLabel("Device display state")
+        oled_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        oled_hint.setFont(unit_font)
+        oled_hint.setStyleSheet("color: #7f8c8d;")
+        oled_layout.addWidget(oled_hint)
+
+        layout.addWidget(oled_group, 0, 2)
+
+        # Temperature statistics
+        temp_stats_group = QGroupBox("Temperature (°C)")
+        temp_stats_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #ff6b6b;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                color: #ff6b6b;
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        temp_stats_layout = QGridLayout(temp_stats_group)
+        temp_stats_layout.addWidget(QLabel("Min:"), 0, 0)
+        self.temp_min_label = QLabel("--")
+        self.temp_min_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        temp_stats_layout.addWidget(self.temp_min_label, 0, 1)
+        temp_stats_layout.addWidget(QLabel("Max:"), 1, 0)
+        self.temp_max_label = QLabel("--")
+        self.temp_max_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        temp_stats_layout.addWidget(self.temp_max_label, 1, 1)
+        temp_stats_layout.addWidget(QLabel("Avg:"), 2, 0)
+        self.temp_avg_label = QLabel("--")
+        self.temp_avg_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        temp_stats_layout.addWidget(self.temp_avg_label, 2, 1)
+        layout.addWidget(temp_stats_group, 1, 0)
+
+        # Humidity statistics
+        humi_stats_group = QGroupBox("Humidity (%)")
+        humi_stats_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #4ecdc4;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                color: #4ecdc4;
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        humi_stats_layout = QGridLayout(humi_stats_group)
+        humi_stats_layout.addWidget(QLabel("Min:"), 0, 0)
+        self.humi_min_label = QLabel("--")
+        self.humi_min_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        humi_stats_layout.addWidget(self.humi_min_label, 0, 1)
+        humi_stats_layout.addWidget(QLabel("Max:"), 1, 0)
+        self.humi_max_label = QLabel("--")
+        self.humi_max_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        humi_stats_layout.addWidget(self.humi_max_label, 1, 1)
+        humi_stats_layout.addWidget(QLabel("Avg:"), 2, 0)
+        self.humi_avg_label = QLabel("--")
+        self.humi_avg_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        humi_stats_layout.addWidget(self.humi_avg_label, 2, 1)
+        layout.addWidget(humi_stats_group, 1, 1)
+
+        # Data stream card
+        stream_group = QGroupBox("Data Stream")
+        stream_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #95a5a6;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                color: #95a5a6;
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        stream_layout = QGridLayout(stream_group)
+        stream_layout.addWidget(QLabel("Packets:"), 0, 0)
+        self.packet_count_label = QLabel("0")
+        self.packet_count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        stream_layout.addWidget(self.packet_count_label, 0, 1)
+        stream_layout.addWidget(QLabel("Rate:"), 1, 0)
+        self.sample_rate_label = QLabel("0.00 Hz")
+        self.sample_rate_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        stream_layout.addWidget(self.sample_rate_label, 1, 1)
+        layout.addWidget(stream_group, 1, 2)
         
         return widget
     
@@ -211,8 +319,18 @@ class DashboardTab(QWidget):
     
     def _on_monitor_clicked(self) -> None:
         """Handle monitor button click"""
-        self.is_monitoring = not self.is_monitoring
-        
+        self.set_monitor_state(not self.is_monitoring, emit_signal=True)
+
+    def set_monitor_state(self, enabled: bool, emit_signal: bool = False) -> None:
+        """
+        Set monitor state and update button appearance.
+
+        Args:
+            enabled: Monitor enabled/disabled state
+            emit_signal: If True, emit monitor_toggled signal
+        """
+        self.is_monitoring = enabled
+
         if self.is_monitoring:
             self.monitor_btn.setText("● Monitor: ON")
             self.monitor_btn.setStyleSheet("""
@@ -243,8 +361,9 @@ class DashboardTab(QWidget):
                     background-color: #95a5a6;
                 }
             """)
-        
-        self.monitor_toggled.emit(self.is_monitoring)
+
+        if emit_signal:
+            self.monitor_toggled.emit(self.is_monitoring)
     
     def _on_logging_clicked(self) -> None:
         """Handle logging button click"""
@@ -309,7 +428,16 @@ class DashboardTab(QWidget):
         Args:
             stats: Statistics dictionary
         """
-        self.stats_panel.update_all(stats)
+        self.temp_min_label.setText(f"{stats.get('temp_min', 0.0):.1f}")
+        self.temp_max_label.setText(f"{stats.get('temp_max', 0.0):.1f}")
+        self.temp_avg_label.setText(f"{stats.get('temp_avg', 0.0):.1f}")
+
+        self.humi_min_label.setText(f"{stats.get('humi_min', 0.0):.1f}")
+        self.humi_max_label.setText(f"{stats.get('humi_max', 0.0):.1f}")
+        self.humi_avg_label.setText(f"{stats.get('humi_avg', 0.0):.1f}")
+
+        self.packet_count_label.setText(f"{stats.get('packet_count', 0)}")
+        self.sample_rate_label.setText(f"{stats.get('sample_rate', 0.0):.2f} Hz")
     
     def add_waveform_point(self, temperature: float, humidity: float, timestamp=None) -> None:
         """
@@ -331,7 +459,14 @@ class DashboardTab(QWidget):
         self.temp_value_label.setText("--.-")
         self.humi_value_label.setText("--.-")
         self.oled_status_label.setText("--")
-        self.stats_panel.reset()
+        self.temp_min_label.setText("--")
+        self.temp_max_label.setText("--")
+        self.temp_avg_label.setText("--")
+        self.humi_min_label.setText("--")
+        self.humi_max_label.setText("--")
+        self.humi_avg_label.setText("--")
+        self.packet_count_label.setText("0")
+        self.sample_rate_label.setText("0.00 Hz")
         self.waveform.clear()
 
 

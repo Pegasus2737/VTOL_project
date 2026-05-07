@@ -162,6 +162,18 @@ class ConnectionBar(QWidget):
             return int(self.baud_combo.currentText())
         except ValueError:
             return 115200
+
+    def set_baudrate(self, baudrate: int) -> None:
+        """
+        Set baud rate in combo box.
+
+        Args:
+            baudrate: Baud rate to select
+        """
+        baud_text = str(baudrate)
+        if self.baud_combo.findText(baud_text) < 0:
+            self.baud_combo.addItem(baud_text)
+        self.baud_combo.setCurrentText(baud_text)
     
     def set_connected(self, connected: bool, port: str = "") -> None:
         """

@@ -111,6 +111,9 @@ class MainController(QObject):
             dashboard_tab: DashboardTab instance
         """
         self.dashboard_tab = dashboard_tab
+
+        # Keep initial button appearance consistent with controller state.
+        self.dashboard_tab.set_monitor_state(self.is_monitoring, emit_signal=False)
         
         # Connect dashboard signals
         dashboard_tab.monitor_toggled.connect(self._on_monitor_toggled)
@@ -172,6 +175,10 @@ class MainController(QObject):
         self.is_replay_mode = False
         self.replay_controller.pause()
         if self.serial_manager.connect(port, baudrate):
+            # Remember last successful connection.
+            self.config.set('serial.port', port, auto_save=False)
+            self.config.set('serial.baud_rate', baudrate, auto_save=False)
+            self.config.save()
             self.main_window.update_status(f"Connected to {port}")
             
             # Start chart update timer
@@ -194,9 +201,15 @@ class MainController(QObject):
         
         self.main_window.connection_bar.set_ports(port_names)
         self.main_window.update_status(f"Found {len(port_names)} ports")
-        
-        # Try auto-detect
-        auto_port = self.serial_manager.find_stm32_port()
+
+        # Prefer saved port; fallback to auto-detected STM/CH340 port.
+        saved_port = self.config.get('serial.port', '')
+        if saved_port and saved_port in port_names:
+            self.main_window.connection_bar.set_selected_port(saved_port)
+            return
+
+        keywords = self.config.get('serial.keywords', None)
+        auto_port = self.serial_manager.find_stm32_port(keywords)
         if auto_port and auto_port in port_names:
             self.main_window.connection_bar.set_selected_port(auto_port)
             self.main_window.update_status(f"Auto-detected: {auto_port}")
@@ -448,6 +461,10 @@ class MainController(QObject):
     @pyqtSlot()
     def _on_settings_changed(self) -> None:
         """Handle settings changed event"""
+        # Update serial defaults in the connection bar.
+        baud_rate = int(self.config.get('serial.baud_rate', 115200))
+        self.main_window.connection_bar.set_baudrate(baud_rate)
+
         # Update alarm thresholds
         temp_threshold = self.config.get('alarm.temperature_high', 35.0)
         humi_threshold = self.config.get('alarm.humidity_high', 80.0)
@@ -541,13 +558,25 @@ class MainController(QObject):
     
     def initialize(self) -> None:
         """Initialize controller (call after UI is ready)"""
-        # Populate ports list
-        self._on_refresh_ports()
-        
         # Load initial settings
         self._on_settings_changed()
-        
-        self.main_window.update_status("Ready")
+
+        # Populate ports list with saved/auto-detected selection.
+        self._on_refresh_ports()
+
+        # Auto-connect on startup when enabled in config.
+        if self.config.get('serial.auto_connect', True):
+            port = self.main_window.connection_bar.get_selected_port()
+            baudrate = int(self.config.get('serial.baud_rate', 115200))
+
+            if port:
+                self.main_window.update_status(f"Auto-connecting to {port} @ {baudrate}...")
+                self._on_connect_requested(port, baudrate)
+            else:
+                self.main_window.update_status("Auto-connect enabled, but no serial device found")
+
+        if not self.is_connected:
+            self.main_window.update_status("Ready")
 
 
 if __name__ == "__main__":

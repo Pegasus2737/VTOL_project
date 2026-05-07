@@ -158,9 +158,15 @@ class ExportUtils:
             # Get the plot widget
             plot_widget = waveform_widget.plot_widget
             
-            # Export to image
-            exporter = plot_widget.scene().grab()
-            exporter.save(output_path)
+            # Capture the rendered PlotWidget as a pixmap and save as PNG.
+            pixmap = plot_widget.grab()
+            if pixmap.isNull():
+                print("Error exporting waveform PNG: captured image is empty")
+                return False
+
+            if not pixmap.save(output_path, "PNG"):
+                print(f"Error exporting waveform PNG: failed to save to {output_path}")
+                return False
             
             print(f"✓ Waveform PNG exported to: {output_path}")
             return True
